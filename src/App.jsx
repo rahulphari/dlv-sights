@@ -712,7 +712,7 @@ const App = () => {
         <div className="absolute inset-0 z-[1000] flex flex-col items-center justify-center bg-slate-900 text-white">
             <Database className="animate-bounce w-10 h-10 mb-4 text-indigo-500"/>
             <p className="text-sm font-medium">{statusMsg}</p>
-            <p className="text-xs text-slate-500 mt-2">Connecting to logistics database...</p>
+            <p className="text-xs text-slate-500 mt-2">Your Patience is Appreciated...</p>
         </div>
       )}
 
@@ -745,7 +745,7 @@ const App = () => {
         {/* Sidebar */}
         <aside className="w-96 bg-white border-r border-slate-200 flex flex-col z-10 shadow-lg relative">
             <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Network Inspector</h3>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">BETA VERSION: USE FACILITY FILTER (TOP RIGHT) AND ROUTE FILTER (BOTTOM RIGHT) TO CUSTOMIZE YOUR DATA</h3>
                 {selectedFacility && (
                     <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">FOCUSED</span>
                 )}
@@ -970,8 +970,8 @@ const App = () => {
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center opacity-60">
                         <div className="bg-slate-100 p-4 rounded-full mb-4"><Truck className="w-10 h-10 text-slate-400" /></div>
-                        <h3 className="text-sm font-bold text-slate-600 mb-1">Explore the Network</h3>
-                        <p className="text-xs max-w-[200px] leading-relaxed">Click on any <span className="text-blue-500 font-bold">Blue Hub Marker</span> on the map to inspect its supply chain connections.</p>
+                        <h3 className="text-sm font-bold text-slate-600 mb-1">Explore DELHIVERY Network Like Never Before</h3>
+                        <p className="text-xs max-w-[200px] leading-relaxed">Click on any <span className="text-blue-500 font-bold">Facility Marker</span> on the map to inspect its FTL/CARTING/AIR connections.</p>
                     </div>
                 )}
             </div>
