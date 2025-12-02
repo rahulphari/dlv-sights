@@ -1,12 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer } from 'lucide-react';
+import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed } from 'lucide-react';
 
 // ==========================================
 // 1. DATA SOURCE CONFIGURATION
-//Instructions: 
-// 1. Upload your data to Google Sheets.
-// 2. Go to File > Share > Publish to web > Select "Comma-separated values (.csv)".
-// 3. Paste the generated links below.
 // ==========================================
 
 const FACILITY_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vStGLrqXIxCAtIaFRYfQW0V7L1Or2uOL-vyXMMqOf1hnx6GdYrn1Y_yY3ex3VIKsKfremF-GtC_X7_P/pub?output=csv";
@@ -61,21 +57,20 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 // Shift Helper
 const getShift = (timeStr) => {
     if (!timeStr) return 'UNK';
-    // Handle formats like "10:00" or "18:00 (+2)"
     const cleanTime = timeStr.split(' ')[0]; 
     const hour = parseInt(cleanTime.split(':')[0], 10);
     
     if (isNaN(hour)) return 'UNK';
 
-    // Morning: 06:00 to 13:59 (Effective)
+    // Morning: 06:00 to 13:59
     if (hour >= 6 && hour < 14) return 'MORNING';
-    // Afternoon: 14:00 to 21:59 (Effective)
+    // Afternoon: 14:00 to 21:59
     if (hour >= 14 && hour < 22) return 'AFTERNOON';
-    // Night: 22:00 to 05:59 (Effective)
+    // Night: 22:00 to 05:59
     return 'NIGHT';
 };
 
-// --- NEW COMPONENT: WEATHER WIDGET ---
+// --- WEATHER WIDGET ---
 const WeatherWidget = ({ lat, lng, locationName }) => {
     const [weather, setWeather] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -89,7 +84,6 @@ const WeatherWidget = ({ lat, lng, locationName }) => {
         const fetchWeather = async () => {
             setLoading(true);
             try {
-                // Free Open-Meteo API
                 const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weather_code,is_day&timezone=auto`;
                 const res = await fetch(url);
                 const data = await res.json();
@@ -111,10 +105,8 @@ const WeatherWidget = ({ lat, lng, locationName }) => {
         fetchWeather();
     }, [lat, lng]);
 
-    // WMO Weather Code to Icon/Text
     const getWeatherIcon = (code, isDay) => {
         if (code === undefined) return { icon: <Sun size={16}/>, label: 'Unknown' };
-        
         if (code === 0) return { icon: isDay ? <Sun size={16} className="text-amber-500"/> : <Moon size={16} className="text-slate-400"/>, label: 'Clear' };
         if (code <= 3) return { icon: <Cloud size={16} className="text-slate-400"/>, label: 'Cloudy' };
         if (code <= 48) return { icon: <Cloud size={16} className="text-slate-300"/>, label: 'Foggy' };
@@ -154,7 +146,7 @@ const WeatherWidget = ({ lat, lng, locationName }) => {
     );
 };
 
-// --- NEW COMPONENT: LIVE CLOCK ---
+// --- LIVE CLOCK ---
 const LiveClock = () => {
     const [time, setTime] = useState(new Date());
 
@@ -199,7 +191,7 @@ const App = () => {
   const [facTypeFilters, setFacTypeFilters] = useState({
       GW: true, 
       H: true,  
-      I: false, 
+      I: true, 
       OTH: false 
   });
 
@@ -209,6 +201,11 @@ const App = () => {
 
   const [showFacLegend, setShowFacLegend] = useState(true);
   const [showRouteLegend, setShowRouteLegend] = useState(true);
+
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isPincodeSearching, setIsPincodeSearching] = useState(false);
 
   const [appState, setAppState] = useState('LOADING'); 
   const [statusMsg, setStatusMsg] = useState('Loading Resources...');
@@ -225,7 +222,9 @@ const App = () => {
       if (!name) return 'OTH';
       const parts = name.split('_');
       const suffix = parts[parts.length - 1].toUpperCase();
-      if (['GW', 'H', 'I'].includes(suffix)) return suffix;
+      if (['GW'].includes(suffix)) return 'GW';
+      if (['H', 'HUB'].includes(suffix)) return 'H';
+      if (['I'].includes(suffix)) return 'I';
       return 'OTH';
   };
 
@@ -236,7 +235,7 @@ const App = () => {
           case 'GW': radius = 7; break; 
           case 'H':  radius = 5.5; break;
           case 'I':  radius = 4; break;
-          default:   radius = 3;
+          default:   radius = 4; 
       }
 
       if (isSelected) {
@@ -260,20 +259,85 @@ const App = () => {
   };
 
   // --- GLOBAL STATS MEMO ---
-  // Pre-calculate counts for ALL facilities for the tooltip
   const globalFacilityStats = useMemo(() => {
       const stats = {};
       connections.forEach(conn => {
-          // Init for Origin
           if (!stats[conn.oc]) stats[conn.oc] = { in: 0, out: 0 };
           stats[conn.oc].out += 1;
-
-          // Init for Dest
           if (!stats[conn.cn]) stats[conn.cn] = { in: 0, out: 0 };
           stats[conn.cn].in += 1;
       });
       return stats;
   }, [connections]);
+
+  // --- SEARCH FILTER MEMO ---
+  const filteredFacilities = useMemo(() => {
+      if (!searchQuery) return [];
+      return facilities.filter(f => 
+          f.name.toLowerCase().includes(searchQuery.toLowerCase())
+      ).slice(0, 5); 
+  }, [searchQuery, facilities]);
+
+  const isPincode = /^\d{6}$/.test(searchQuery);
+
+  // --- SEARCH HANDLER ---
+  const handleSearchSelect = (facility) => {
+      setSelectedFacility(facility);
+      if (mapInstanceRef.current) {
+          mapInstanceRef.current.flyTo([facility.lat, facility.lng], 10, { duration: 1.5 });
+      }
+      setSearchQuery('');
+      setIsSearchFocused(false);
+  };
+
+  const handlePincodeSearch = async () => {
+      if (!isPincode) return;
+      setIsPincodeSearching(true);
+
+      try {
+          // Using Nominatim OpenStreetMap API for Geocoding
+          const response = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${searchQuery}&countrycodes=in&format=json`);
+          const data = await response.json();
+
+          if (data && data.length > 0) {
+              const { lat, lon } = data[0];
+              const userLat = parseFloat(lat);
+              const userLng = parseFloat(lon);
+
+              // Find nearest facility
+              let nearest = null;
+              let minDist = Infinity;
+
+              facilities.forEach(fac => {
+                  const d = calculateDistance(userLat, userLng, fac.lat, fac.lng);
+                  if (d < minDist) {
+                      minDist = d;
+                      nearest = fac;
+                  }
+              });
+
+              if (nearest) {
+                  // Fly to nearest facility
+                  setSelectedFacility(nearest);
+                  if (mapInstanceRef.current) {
+                      mapInstanceRef.current.flyTo([nearest.lat, nearest.lng], 9, { duration: 1.5 });
+                  }
+                  setSearchQuery(''); // Clear search
+                  alert(`Nearest Facility found: ${nearest.name} (~${minDist} km away)`);
+              } else {
+                  alert("No facilities found nearby.");
+              }
+          } else {
+              alert("Invalid Pincode or Location not found.");
+          }
+      } catch (error) {
+          console.error("Geocoding error:", error);
+          alert("Failed to search location. Please try again.");
+      } finally {
+          setIsPincodeSearching(false);
+          setIsSearchFocused(false);
+      }
+  };
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -314,7 +378,6 @@ const App = () => {
       setStatusMsg('Fetching Data...');
       
       try {
-          // 1. Fetch Data
           const facRes = await fetch(FACILITY_DATA_URL);
           const connRes = await fetch(CONNECTION_DATA_URL);
 
@@ -322,7 +385,6 @@ const App = () => {
               throw new Error("Failed to download data files");
           }
 
-          // 3. Process Content
           const facText = await facRes.text();
           const connText = await connRes.text();
           processCSV(facText, connText);
@@ -413,6 +475,11 @@ const App = () => {
                         setFacilityStats({ total: resFac.data.length, active });
                         setConnections(parsedConnections);
                         setConnectionStats({ total: resConn.data.length, valid });
+                        
+                        const modes = {};
+                        parsedConnections.forEach(c => modes[c.vmode] = true);
+                        setFilters(p => ({ ...p, vmodes: modes }));
+
                         setAppState('READY');
                     }
                 });
@@ -533,6 +600,7 @@ const App = () => {
       const isSelected = selectedFacility?.name === fac.name;
       const isConnected = selectedFacility && connectedToSelection.has(fac.name);
       
+      // MODIFIED LOGIC: If selected, force show.
       const isVisible = facTypeFilters[fac.type] || isSelected || isConnected;
 
       if (!isVisible) return;
@@ -548,10 +616,7 @@ const App = () => {
       });
 
       // --- ENHANCED HOVER CARD ---
-      // Get global stats for this facility
       const fStats = globalFacilityStats[fac.name] || { in: 0, out: 0 };
-      
-      // Determine Type Color
       let typeColorClass = 'text-slate-500';
       if (fac.type === 'GW') typeColorClass = 'text-violet-600';
       if (fac.type === 'H') typeColorClass = 'text-blue-600';
@@ -713,10 +778,25 @@ const App = () => {
     <div className="flex flex-col h-screen bg-slate-50 font-sans text-slate-900 relative">
       
       {appState === 'LOADING' && (
-        <div className="absolute inset-0 z-[1000] flex flex-col items-center justify-center bg-slate-900 text-white">
-            <Database className="animate-bounce w-10 h-10 mb-4 text-indigo-500"/>
-            <p className="text-sm font-medium">{statusMsg}</p>
-            <p className="text-xs text-slate-500 mt-2">Connecting to logistics database...</p>
+        <div className="absolute inset-0 z-[1000] flex flex-col items-center justify-center bg-slate-900 text-white transition-opacity duration-500">
+            {/* Branding */}
+            <div className="flex items-center gap-3 mb-8 animate-pulse">
+                <div className="bg-indigo-600 p-3 rounded-xl text-white shadow-lg shadow-indigo-500/20 transform -rotate-3">
+                    <MapIcon size={32} strokeWidth={2.5} />
+                </div>
+                <h1 className="text-4xl font-black tracking-tighter">
+                    DLV<span className="text-indigo-500">-</span>SIGHTS
+                </h1>
+            </div>
+
+            {/* Loader */}
+            <div className="flex flex-col items-center">
+                <Loader2 className="animate-spin text-indigo-500 w-8 h-8 mb-4" />
+                <p className="text-sm font-medium tracking-wide text-slate-300">{statusMsg}</p>
+                <div className="mt-2 h-1 w-32 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-500 animate-pulse w-full"></div>
+                </div>
+            </div>
         </div>
       )}
 
@@ -987,45 +1067,103 @@ const App = () => {
         <main className="flex-1 relative bg-slate-900">
           <div id="map" ref={mapRef} className="absolute inset-0 z-0 outline-none" />
           
+          {/* SEARCH BOX (Bottom Left) */}
+          {appState === 'READY' && (
+              <div className="absolute bottom-6 left-6 z-[400] w-64 font-sans">
+                  {/* Results Dropdown */}
+                  {isSearchFocused && filteredFacilities.length > 0 && (
+                      <div className="bg-white/90 backdrop-blur-md rounded-t-xl shadow-lg border border-slate-200/50 overflow-hidden mb-1 animate-fadeIn">
+                          {filteredFacilities.map(fac => {
+                              // Get Color
+                              let typeColorClass = 'text-slate-500';
+                              if (fac.type === 'GW') typeColorClass = 'text-violet-600';
+                              if (fac.type === 'H') typeColorClass = 'text-blue-600';
+                              if (fac.type === 'I') typeColorClass = 'text-cyan-600';
+
+                              return (
+                                  <button 
+                                      key={fac.name}
+                                      onClick={() => handleSearchSelect(fac)}
+                                      className="w-full text-left px-4 py-2 hover:bg-indigo-50 flex items-center gap-3 border-b border-slate-100 last:border-0 transition-colors"
+                                  >
+                                      <div className={`text-[10px] font-bold ${typeColorClass} border border-slate-200 rounded px-1`}>{fac.type}</div>
+                                      <div className="min-w-0">
+                                          <div className="text-xs font-bold text-slate-700 truncate">{fac.name}</div>
+                                          <div className="text-[9px] text-slate-400 truncate">{fac.address}</div>
+                                      </div>
+                                  </button>
+                              )
+                          })}
+                      </div>
+                  )}
+                  
+                  {/* Input Field */}
+                  <div className="bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-slate-200/50 flex items-center px-4 py-2.5 gap-2 group focus-within:ring-2 focus-within:ring-indigo-500/50 transition-all">
+                      <Search size={16} className="text-slate-400 group-focus-within:text-indigo-500 transition-colors"/>
+                      <input 
+                          type="text" 
+                          placeholder="Search facility or pincode..." 
+                          className="bg-transparent border-none outline-none text-xs w-full text-slate-700 placeholder:text-slate-400"
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          onFocus={() => setIsSearchFocused(true)}
+                          onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
+                      />
+                      {isPincode && (
+                          <button 
+                             onClick={handlePincodeSearch}
+                             disabled={isPincodeSearching}
+                             className="text-[9px] bg-indigo-600 text-white px-2 py-1 rounded font-bold hover:bg-indigo-700 transition-colors flex items-center gap-1"
+                          >
+                             {isPincodeSearching ? <Loader2 size={10} className="animate-spin"/> : <LocateFixed size={10}/>} Find
+                          </button>
+                      )}
+                      {!isPincode && searchQuery && (
+                          <button onClick={() => setSearchQuery('')} className="text-slate-400 hover:text-slate-600">
+                              <X size={14}/>
+                          </button>
+                      )}
+                  </div>
+              </div>
+          )}
+          
           {/* Facility Type Filters (Top Right) - Collapsible */}
           {appState === 'READY' && (
               <div className="absolute top-4 right-4 z-[400] flex flex-col items-end gap-2">
                   <button 
                      onClick={() => setShowFacLegend(!showFacLegend)}
-                     className="bg-white p-2 rounded-lg shadow-md text-slate-600 hover:text-indigo-600 transition-all flex items-center gap-2"
-                     title="Toggle Facility Filters"
+                     className={`bg-white/90 backdrop-blur p-2.5 rounded-full shadow-lg text-slate-600 hover:text-indigo-600 hover:bg-white transition-all border border-slate-200 ${showFacLegend ? 'ring-2 ring-indigo-100 text-indigo-600' : ''}`}
+                     title="Facility Filters"
                   >
-                      <MapPin size={18} />
-                      {!showFacLegend && <span className="text-xs font-bold animate-fadeIn">Facilities</span>}
-                      {showFacLegend ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
+                      <MapPin size={20} strokeWidth={2} />
                   </button>
 
                   {showFacLegend && (
-                    <div className="bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-xl text-xs border border-slate-200 w-44 animate-fadeIn origin-top-right">
+                    <div className="bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-2xl text-xs border border-slate-200/50 w-56 animate-fadeIn origin-top-right">
                         <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-100">
-                           <h4 className="font-bold text-slate-800 uppercase text-[10px] tracking-wider">Facility Type</h4>
+                           <h4 className="font-bold text-slate-800 uppercase text-[10px] tracking-widest">Facility Type</h4>
+                           <button onClick={() => setShowFacLegend(false)} className="text-slate-400 hover:text-slate-600"><X size={14}/></button>
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
-                                <input type="checkbox" className="accent-indigo-600" checked={facTypeFilters.GW} onChange={e => setFacTypeFilters({...facTypeFilters, GW: e.target.checked})}/>
-                                <div className="w-3 h-3 rounded-full bg-violet-600"></div>
+                        <div className="space-y-1 mb-3">
+                            <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50/50 p-1.5 rounded transition-colors">
+                                <input type="checkbox" className="accent-indigo-600" checked={facTypeFilters.GW} onChange={e => setFacTypeFilters(prev => ({...prev, GW: e.target.checked}))}/>
+                                <div className="w-2.5 h-2.5 rounded-full bg-violet-600 shadow-sm shadow-violet-200"></div>
                                 <span className={facTypeFilters.GW ? "text-slate-700 font-medium" : "text-slate-400"}>Gateway (GW)</span>
                             </label>
-                            <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
-                                <input type="checkbox" className="accent-blue-500" checked={facTypeFilters.H} onChange={e => setFacTypeFilters({...facTypeFilters, H: e.target.checked})}/>
-                                <div className="w-2.5 h-2.5 rounded-full bg-blue-600"></div>
+                            <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50/50 p-1.5 rounded transition-colors">
+                                <input type="checkbox" className="accent-blue-500" checked={facTypeFilters.H} onChange={e => setFacTypeFilters(prev => ({...prev, H: e.target.checked}))}/>
+                                <div className="w-2 h-2 rounded-full bg-blue-600 shadow-sm shadow-blue-200"></div>
                                 <span className={facTypeFilters.H ? "text-slate-700 font-medium" : "text-slate-400"}>Hub (H)</span>
                             </label>
-                            <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
-                                <input type="checkbox" className="accent-sky-500" checked={facTypeFilters.I} onChange={e => setFacTypeFilters({...facTypeFilters, I: e.target.checked})}/>
-                                <div className="w-2 h-2 rounded-full bg-cyan-600"></div>
+                            <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50/50 p-1.5 rounded transition-colors">
+                                <input type="checkbox" className="accent-sky-500" checked={facTypeFilters.I} onChange={e => setFacTypeFilters(prev => ({...prev, I: e.target.checked}))}/>
+                                <div className="w-1.5 h-1.5 rounded-full bg-cyan-600 shadow-sm shadow-cyan-200"></div>
                                 <span className={facTypeFilters.I ? "text-slate-700 font-medium" : "text-slate-400"}>IPC (I)</span>
                             </label>
-                            <label className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 p-1 rounded">
-                                <input type="checkbox" className="accent-slate-400" checked={facTypeFilters.OTH} onChange={e => setFacTypeFilters({...facTypeFilters, OTH: e.target.checked})}/>
-                                <div className="w-1.5 h-1.5 rounded-full bg-slate-500"></div>
-                                <span className={facTypeFilters.OTH ? "text-slate-700 font-medium" : "text-slate-400"}>Others</span>
-                            </label>
+                        </div>
+                        
+                        <div className="bg-slate-50 p-2 rounded border border-slate-100 text-[9px] text-slate-400 leading-tight italic">
+                            <span className="font-bold text-slate-500">Note:</span> DC/DPPs/IM etc. are hidden to reduce clutter. You can still search for them or view them by clicking a connected facility.
                         </div>
                     </div>
                   )}
@@ -1037,31 +1175,30 @@ const App = () => {
             <div className="absolute bottom-6 right-6 flex flex-col items-end z-[400] gap-2">
                <button 
                   onClick={() => setShowRouteLegend(!showRouteLegend)}
-                  className="bg-white p-2 rounded-lg shadow-md text-slate-600 hover:text-indigo-600 transition-all flex items-center gap-2"
-                  title="Toggle Route Filters"
+                  className={`bg-white/90 backdrop-blur p-2.5 rounded-full shadow-lg text-slate-600 hover:text-emerald-600 hover:bg-white transition-all border border-slate-200 ${showRouteLegend ? 'ring-2 ring-emerald-100 text-emerald-600' : ''}`}
+                  title="Route Filters"
                >
-                  <Filter size={18} />
-                  {!showRouteLegend && <span className="text-xs font-bold animate-fadeIn">Route Filters</span>}
-                  {showRouteLegend ? <ChevronDown size={14}/> : <ChevronUp size={14}/>}
+                  <Filter size={20} strokeWidth={2} />
                </button>
 
                {showRouteLegend && (
-                  <div className="bg-white/95 backdrop-blur-sm p-4 rounded-lg shadow-xl text-xs border border-slate-200 w-56 animate-fadeIn origin-bottom-right">
+                  <div className="bg-white/90 backdrop-blur-md p-4 rounded-xl shadow-2xl text-xs border border-slate-200/50 w-56 animate-fadeIn origin-bottom-right">
                       <div className="flex justify-between items-center mb-3 border-b border-slate-100 pb-2">
-                          <h4 className="font-bold text-slate-800 flex items-center gap-1">Display Options</h4>
+                          <h4 className="font-bold text-slate-800 uppercase text-[10px] tracking-widest">Route Options</h4>
+                          <button onClick={() => setShowRouteLegend(false)} className="text-slate-400 hover:text-slate-600"><X size={14}/></button>
                       </div>
 
                       <div className="space-y-2 mb-4">
-                          <label className="flex items-center justify-between cursor-pointer hover:bg-slate-50 p-1 rounded">
+                          <label className="flex items-center justify-between cursor-pointer hover:bg-slate-50/50 p-1.5 rounded transition-colors">
                               <div className="flex items-center gap-2">
-                                  <span className={`w-3 h-3 rounded-full ${filters.showOutbound ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                                  <span className={`w-2.5 h-2.5 rounded-full ${filters.showOutbound ? 'bg-emerald-500 shadow-sm shadow-emerald-200' : 'bg-slate-300'}`}></span>
                                   <span className={filters.showOutbound ? 'text-slate-700 font-medium' : 'text-slate-400'}>Outbound</span>
                               </div>
                               <input type="checkbox" className="accent-emerald-500" checked={filters.showOutbound} onChange={(e) => setFilters({...filters, showOutbound: e.target.checked})}/>
                           </label>
-                          <label className="flex items-center justify-between cursor-pointer hover:bg-slate-50 p-1 rounded">
+                          <label className="flex items-center justify-between cursor-pointer hover:bg-slate-50/50 p-1.5 rounded transition-colors">
                               <div className="flex items-center gap-2">
-                                  <span className={`w-3 h-3 rounded-full ${filters.showInbound ? 'bg-amber-500' : 'bg-slate-300'}`}></span>
+                                  <span className={`w-2.5 h-2.5 rounded-full ${filters.showInbound ? 'bg-amber-500 shadow-sm shadow-amber-200' : 'bg-slate-300'}`}></span>
                                   <span className={filters.showInbound ? 'text-slate-700 font-medium' : 'text-slate-400'}>Inbound</span>
                               </div>
                               <input type="checkbox" className="accent-amber-500" checked={filters.showInbound} onChange={(e) => setFilters({...filters, showInbound: e.target.checked})}/>
@@ -1070,14 +1207,12 @@ const App = () => {
 
                       {Object.keys(filters.vmodes).length > 0 && (
                           <div className="border-t border-slate-100 pt-3">
-                              <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Service Type (VMode)</h5>
-                              <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                              <h5 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Service Type</h5>
+                              <div className="space-y-1 max-h-40 overflow-y-auto pr-1 scrollbar-hide">
                                   {Object.keys(filters.vmodes).sort().map(mode => (
-                                      <label key={mode} className="flex items-center justify-between cursor-pointer hover:bg-slate-50 p-1 rounded">
+                                      <label key={mode} className="flex items-center justify-between cursor-pointer hover:bg-slate-50/50 p-1.5 rounded transition-colors">
                                           <span className={`truncate ${filters.vmodes[mode] ? 'text-slate-600' : 'text-slate-400 line-through'}`}>{mode}</span>
-                                          <input type="checkbox" className="accent-indigo-500" checked={filters.vmodes[mode]} onChange={(e) => {
-                                                  setFilters(prev => ({...prev, vmodes: {...prev.vmodes, [mode]: e.target.checked}}));
-                                          }}/>
+                                          <input type="checkbox" className="accent-indigo-500" checked={filters.vmodes[mode]} onChange={(e) => setFilters(p => ({...p, vmodes: {...p.vmodes, [mode]: e.target.checked}}))}/>
                                       </label>
                                   ))}
                               </div>
