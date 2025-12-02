@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed } from 'lucide-react';
+import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed, Sparkles } from 'lucide-react';
 
 // ==========================================
 // 1. DATA SOURCE CONFIGURATION
@@ -199,8 +199,8 @@ const App = () => {
   const [showSortOptions, setShowSortOptions] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'dist', dir: 'desc' }); 
 
-  const [showFacLegend, setShowFacLegend] = useState(true);
-  const [showRouteLegend, setShowRouteLegend] = useState(true);
+  const [showFacLegend, setShowFacLegend] = useState(true); // OPEN BY DEFAULT
+  const [showRouteLegend, setShowRouteLegend] = useState(true); // OPEN BY DEFAULT
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -223,7 +223,7 @@ const App = () => {
       const parts = name.split('_');
       const suffix = parts[parts.length - 1].toUpperCase();
       if (['GW'].includes(suffix)) return 'GW';
-      if (['H', 'HUB'].includes(suffix)) return 'H';
+      if (['H', 'HUB'].includes(suffix)) return 'H'; 
       if (['I'].includes(suffix)) return 'I';
       return 'OTH';
   };
@@ -290,17 +290,40 @@ const App = () => {
       setIsSearchFocused(false);
   };
 
-  const handlePincodeSearch = async () => {
-      if (!isPincode) return;
+  // --- SMART AI-LIKE ADDRESS SEARCH ---
+  const performLocationSearch = async (query) => {
       setIsPincodeSearching(true);
-
       try {
-          // Using Nominatim OpenStreetMap API for Geocoding
-          const response = await fetch(`https://nominatim.openstreetmap.org/search?postalcode=${searchQuery}&countrycodes=in&format=json`);
-          const data = await response.json();
+          let searchAttempts = [query];
 
-          if (data && data.length > 0) {
-              const { lat, lon } = data[0];
+          // Strategy 2: Clean "Noise" words (Hindi/English mix)
+          const cleanedQuery = query.replace(/ke pass|near|opposite|opp|behind|next to/gi, "").trim();
+          if (cleanedQuery !== query) searchAttempts.push(cleanedQuery);
+
+          // Strategy 3: Extract Likely Location entities (last 2 parts)
+          const parts = query.split(',');
+          if (parts.length > 1) {
+              // Try "City, State" or "District, State"
+              const broadQuery = parts.slice(-2).join(',').trim();
+              searchAttempts.push(broadQuery);
+          }
+
+          let data = null;
+          let foundQuery = "";
+
+          // Progressive Search
+          for (const q of searchAttempts) {
+              const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&countrycodes=in&format=json&limit=1`);
+              const results = await response.json();
+              if (results && results.length > 0) {
+                  data = results[0];
+                  foundQuery = q;
+                  break; // Found a match!
+              }
+          }
+
+          if (data) {
+              const { lat, lon, display_name } = data;
               const userLat = parseFloat(lat);
               const userLng = parseFloat(lon);
 
@@ -317,18 +340,18 @@ const App = () => {
               });
 
               if (nearest) {
-                  // Fly to nearest facility
                   setSelectedFacility(nearest);
                   if (mapInstanceRef.current) {
                       mapInstanceRef.current.flyTo([nearest.lat, nearest.lng], 9, { duration: 1.5 });
                   }
-                  setSearchQuery(''); // Clear search
-                  alert(`Nearest Facility found: ${nearest.name} (~${minDist} km away)`);
+                  setSearchQuery(''); 
+                  // Informative Alert using the query that worked
+                  alert(`🔍 Found location using: "${foundQuery}"\n📍 ${display_name}\n\n🚀 Nearest Facility: ${nearest.name} (~${minDist} km away)`);
               } else {
                   alert("No facilities found nearby.");
               }
           } else {
-              alert("Invalid Pincode or Location not found.");
+              alert("Could not identify this location. Please try a simpler address (e.g., 'Nokha, Bikaner').");
           }
       } catch (error) {
           console.error("Geocoding error:", error);
@@ -338,6 +361,9 @@ const App = () => {
           setIsSearchFocused(false);
       }
   };
+
+  const handlePincodeSearch = () => performLocationSearch(searchQuery);
+  const handleSmartAddressSearch = () => performLocationSearch(searchQuery);
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -1109,7 +1135,7 @@ const App = () => {
                           onFocus={() => setIsSearchFocused(true)}
                           onBlur={() => setTimeout(() => setIsSearchFocused(false), 200)}
                       />
-                      {isPincode && (
+                      {isPincode ? (
                           <button 
                              onClick={handlePincodeSearch}
                              disabled={isPincodeSearching}
@@ -1117,8 +1143,16 @@ const App = () => {
                           >
                              {isPincodeSearching ? <Loader2 size={10} className="animate-spin"/> : <LocateFixed size={10}/>} Find
                           </button>
-                      )}
-                      {!isPincode && searchQuery && (
+                      ) : searchQuery && filteredFacilities.length === 0 ? (
+                         <button 
+                             onClick={handleSmartAddressSearch}
+                             disabled={isPincodeSearching}
+                             className="text-[9px] bg-indigo-600 text-white px-2 py-1 rounded font-bold hover:bg-indigo-700 transition-colors flex items-center gap-1 whitespace-nowrap"
+                             title="Smart Address Search"
+                          >
+                             {isPincodeSearching ? <Loader2 size={10} className="animate-spin"/> : <Sparkles size={10}/>} Smart Find
+                          </button>
+                      ) : searchQuery && (
                           <button onClick={() => setSearchQuery('')} className="text-slate-400 hover:text-slate-600">
                               <X size={14}/>
                           </button>
@@ -1139,7 +1173,7 @@ const App = () => {
                   </button>
 
                   {showFacLegend && (
-                    <div className="bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-2xl text-xs border border-slate-200/50 w-56 animate-fadeIn origin-top-right">
+                    <div className="bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-2xl text-xs border border-slate-200/50 w-44 animate-fadeIn origin-top-right">
                         <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-100">
                            <h4 className="font-bold text-slate-800 uppercase text-[10px] tracking-widest">Facility Type</h4>
                            <button onClick={() => setShowFacLegend(false)} className="text-slate-400 hover:text-slate-600"><X size={14}/></button>
@@ -1161,9 +1195,8 @@ const App = () => {
                                 <span className={facTypeFilters.I ? "text-slate-700 font-medium" : "text-slate-400"}>IPC (I)</span>
                             </label>
                         </div>
-                        
-                        <div className="bg-slate-50 p-2 rounded border border-slate-100 text-[9px] text-slate-400 leading-tight italic">
-                            <span className="font-bold text-slate-500">Note:</span> DC/DPPs/IM etc. are hidden to reduce clutter. You can still search for them or view them by clicking a connected facility.
+                        <div className="bg-slate-50/80 p-2 rounded border border-slate-100 text-[9px] text-slate-500 leading-tight italic">
+                            <span className="font-bold text-slate-600">Note:</span> DC/DPPs/IM etc. are hidden to reduce clutter. You can still search for them or view them by clicking a connected facility.
                         </div>
                     </div>
                   )}
@@ -1172,7 +1205,7 @@ const App = () => {
 
           {/* Route Filters (Bottom Right) - Collapsible */}
           {appState === 'READY' && (
-            <div className="absolute bottom-6 right-6 flex flex-col items-end z-[400] gap-2">
+            <div className="absolute bottom-20 left-6 flex flex-col items-start z-[400] gap-2">
                <button 
                   onClick={() => setShowRouteLegend(!showRouteLegend)}
                   className={`bg-white/90 backdrop-blur p-2.5 rounded-full shadow-lg text-slate-600 hover:text-emerald-600 hover:bg-white transition-all border border-slate-200 ${showRouteLegend ? 'ring-2 ring-emerald-100 text-emerald-600' : ''}`}
@@ -1182,7 +1215,7 @@ const App = () => {
                </button>
 
                {showRouteLegend && (
-                  <div className="bg-white/90 backdrop-blur-md p-4 rounded-xl shadow-2xl text-xs border border-slate-200/50 w-56 animate-fadeIn origin-bottom-right">
+                  <div className="bg-white/90 backdrop-blur-md p-4 rounded-xl shadow-2xl text-xs border border-slate-200/50 w-56 animate-fadeIn origin-bottom-left absolute bottom-12 left-0">
                       <div className="flex justify-between items-center mb-3 border-b border-slate-100 pb-2">
                           <h4 className="font-bold text-slate-800 uppercase text-[10px] tracking-widest">Route Options</h4>
                           <button onClick={() => setShowRouteLegend(false)} className="text-slate-400 hover:text-slate-600"><X size={14}/></button>
