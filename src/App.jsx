@@ -181,7 +181,7 @@ const TipsTicker = () => {
     const tips = [
         "Tip: Search by Pincode (e.g. '110037') to find the nearest hub instantly.",
         "Pro Tip: Click on a specific route line to see real-world driving distance & time.",
-        "Did you know? Isolated facilities with no active routes are automatically hidden.",
+        "Did you know? You can see the live weather information of the selected facility on top-right!",
         "Tip: Use the 'Smart Find' button to locate hubs by raw address text.",
         "Guide: Blue = Hubs, Violet = Gateways, Cyan = IPCs.",
         "Tip: Click a facility to freeze the view and filter connections.",
@@ -1020,7 +1020,7 @@ const App = () => {
                </div>
             ) : (
                <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Network Inspector</h3>
+                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Network Inspector (Beta)</h3>
                    {selectedFacility && (
                        <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">FOCUSED</span>
                    )}
@@ -1051,7 +1051,7 @@ const App = () => {
                                          <div className="h-full bg-emerald-400" style={{ flex: 1 }}></div>
                                      </div>
                                      <div className="text-[8px] text-center text-emerald-600 font-bold mt-1">
-                                         {osrmData ? `+ ${osrmData.bufferHours}h Buffer (Loading/Rest)` : 'Calculating...'}
+                                         {osrmData ? `+ ${osrmData.bufferHours}h Buffer (Rest)` : 'Calculating...'}
                                      </div>
                                 </div>
                                 <div className="text-right">
@@ -1316,8 +1316,8 @@ const App = () => {
                 ) : (
                     <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center opacity-60">
                         <div className="bg-slate-100 p-4 rounded-full mb-4"><Truck className="w-10 h-10 text-slate-400" /></div>
-                        <h3 className="text-sm font-bold text-slate-600 mb-1">Explore the Network</h3>
-                        <p className="text-xs max-w-[200px] leading-relaxed">Click on any <span className="text-blue-500 font-bold">Blue Hub Marker</span> on the map to inspect its supply chain connections.</p>
+                        <h3 className="text-sm font-bold text-slate-600 mb-1">Explore DELHIVERY Network like Never Before!</h3>
+                        <p className="text-xs max-w-[200px] leading-relaxed">Click on any <span className="text-blue-500 font-bold">Facility Marker</span> on the map to view its connections.</p>
                     </div>
                 )}
             </div>
