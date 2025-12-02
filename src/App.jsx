@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed, Sparkles } from 'lucide-react';
+import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed, Sparkles, Route as RouteIcon, ArrowLeft, Timer, Activity, TrendingUp, Lightbulb } from 'lucide-react';
 
 // ==========================================
 // 1. DATA SOURCE CONFIGURATION
@@ -40,7 +40,7 @@ const useExternalResource = (url, type) => {
   return loaded;
 };
 
-// Distance Helper (Haversine Formula)
+// Distance Helper (Haversine Formula - Air Distance)
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
     if (!lat1 || !lon1 || !lat2 || !lon2) return 0;
     const R = 6371; 
@@ -52,6 +52,13 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
     const d = R * c; 
     return Math.round(d);
+};
+
+// Time Formatter for Duration (Seconds to H:M)
+const formatDuration = (seconds) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return `${h}h ${m}m`;
 };
 
 // Shift Helper
@@ -169,6 +176,42 @@ const LiveClock = () => {
     );
 };
 
+// --- DYNAMIC TIPS TICKER ---
+const TipsTicker = () => {
+    const tips = [
+        "Tip: Search by Pincode (e.g. '110037') to find the nearest hub instantly.",
+        "Pro Tip: Click on a specific route line to see real-world driving distance & time.",
+        "Did you know? Isolated facilities with no active routes are automatically hidden.",
+        "Tip: Use the 'Smart Find' button to locate hubs by raw address text.",
+        "Guide: Blue = Hubs, Violet = Gateways, Cyan = IPCs.",
+        "Tip: Click a facility to freeze the view and filter connections.",
+        "Guide: The sidebar shows a shift-wise breakdown of traffic."
+    ];
+    
+    const [currentTip, setCurrentTip] = useState(0);
+    const [fade, setFade] = useState(true);
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setFade(false); // Fade out
+            setTimeout(() => {
+                setCurrentTip((prev) => (prev + 1) % tips.length);
+                setFade(true); // Fade in
+            }, 500);
+        }, 6000); // Change every 6 seconds
+        return () => clearInterval(interval);
+    }, []);
+
+    return (
+        <div className="flex items-center gap-2 mt-1 text-[10px] font-medium text-slate-400 max-w-md overflow-hidden">
+            <Lightbulb size={12} className="text-amber-400 shrink-0" />
+            <span className={`transition-opacity duration-500 ${fade ? 'opacity-100' : 'opacity-0'} truncate`}>
+                {tips[currentTip]}
+            </span>
+        </div>
+    );
+};
+
 
 const App = () => {
   const leafletCssLoaded = useExternalResource('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', 'style');
@@ -177,7 +220,10 @@ const App = () => {
 
   const [facilities, setFacilities] = useState([]);
   const [connections, setConnections] = useState([]);
+  
+  // SELECTION STATE
   const [selectedFacility, setSelectedFacility] = useState(null);
+  const [selectedConnection, setSelectedConnection] = useState(null);
   
   const [facilityStats, setFacilityStats] = useState({ total: 0, active: 0 });
   const [connectionStats, setConnectionStats] = useState({ total: 0, valid: 0 });
@@ -206,6 +252,10 @@ const App = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isPincodeSearching, setIsPincodeSearching] = useState(false);
+
+  // OSRM Route Data
+  const [activePaths, setActivePaths] = useState({}); // Store cached paths
+  const routeCache = useRef({}); // Persist across renders
 
   const [appState, setAppState] = useState('LOADING'); 
   const [statusMsg, setStatusMsg] = useState('Loading Resources...');
@@ -270,19 +320,27 @@ const App = () => {
       return stats;
   }, [connections]);
 
-  // --- SEARCH FILTER MEMO ---
+  // --- SEARCH FILTER MEMO (UPDATED: Checks connectivity) ---
   const filteredFacilities = useMemo(() => {
       if (!searchQuery) return [];
-      return facilities.filter(f => 
-          f.name.toLowerCase().includes(searchQuery.toLowerCase())
-      ).slice(0, 5); 
-  }, [searchQuery, facilities]);
+      return facilities
+        .filter(f => {
+            // Check if facility is active (has connections)
+            const stats = globalFacilityStats[f.name];
+            const isActive = stats && (stats.in > 0 || stats.out > 0);
+            if (!isActive) return false; // Hide from search
+
+            return f.name.toLowerCase().includes(searchQuery.toLowerCase());
+        })
+        .slice(0, 5); 
+  }, [searchQuery, facilities, globalFacilityStats]);
 
   const isPincode = /^\d{6}$/.test(searchQuery);
 
-  // --- SEARCH HANDLER ---
+  // --- HANDLERS ---
   const handleSearchSelect = (facility) => {
       setSelectedFacility(facility);
+      setSelectedConnection(null); 
       if (mapInstanceRef.current) {
           mapInstanceRef.current.flyTo([facility.lat, facility.lng], 10, { duration: 1.5 });
       }
@@ -290,20 +348,19 @@ const App = () => {
       setIsSearchFocused(false);
   };
 
+  const handleConnectionClick = (connection) => {
+      setSelectedConnection(connection);
+  };
+
   // --- SMART AI-LIKE ADDRESS SEARCH ---
   const performLocationSearch = async (query) => {
       setIsPincodeSearching(true);
       try {
           let searchAttempts = [query];
-
-          // Strategy 2: Clean "Noise" words (Hindi/English mix)
           const cleanedQuery = query.replace(/ke pass|near|opposite|opp|behind|next to/gi, "").trim();
           if (cleanedQuery !== query) searchAttempts.push(cleanedQuery);
-
-          // Strategy 3: Extract Likely Location entities (last 2 parts)
           const parts = query.split(',');
           if (parts.length > 1) {
-              // Try "City, State" or "District, State"
               const broadQuery = parts.slice(-2).join(',').trim();
               searchAttempts.push(broadQuery);
           }
@@ -311,14 +368,13 @@ const App = () => {
           let data = null;
           let foundQuery = "";
 
-          // Progressive Search
           for (const q of searchAttempts) {
               const response = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&countrycodes=in&format=json&limit=1`);
               const results = await response.json();
               if (results && results.length > 0) {
                   data = results[0];
                   foundQuery = q;
-                  break; // Found a match!
+                  break;
               }
           }
 
@@ -327,11 +383,14 @@ const App = () => {
               const userLat = parseFloat(lat);
               const userLng = parseFloat(lon);
 
-              // Find nearest facility
               let nearest = null;
               let minDist = Infinity;
 
               facilities.forEach(fac => {
+                  // ONLY consider facilities with connections
+                  const stats = globalFacilityStats[fac.name];
+                  if (!stats || (stats.in === 0 && stats.out === 0)) return;
+
                   const d = calculateDistance(userLat, userLng, fac.lat, fac.lng);
                   if (d < minDist) {
                       minDist = d;
@@ -341,21 +400,21 @@ const App = () => {
 
               if (nearest) {
                   setSelectedFacility(nearest);
+                  setSelectedConnection(null);
                   if (mapInstanceRef.current) {
                       mapInstanceRef.current.flyTo([nearest.lat, nearest.lng], 9, { duration: 1.5 });
                   }
                   setSearchQuery(''); 
-                  // Informative Alert using the query that worked
                   alert(`🔍 Found location using: "${foundQuery}"\n📍 ${display_name}\n\n🚀 Nearest Facility: ${nearest.name} (~${minDist} km away)`);
               } else {
-                  alert("No facilities found nearby.");
+                  alert("No active facilities found nearby.");
               }
           } else {
-              alert("Could not identify this location. Please try a simpler address (e.g., 'Nokha, Bikaner').");
+              alert("Could not identify this location.");
           }
       } catch (error) {
           console.error("Geocoding error:", error);
-          alert("Failed to search location. Please try again.");
+          alert("Failed to search location.");
       } finally {
           setIsPincodeSearching(false);
           setIsSearchFocused(false);
@@ -402,7 +461,6 @@ const App = () => {
 
   const loadData = async () => {
       setStatusMsg('Fetching Data...');
-      
       try {
           const facRes = await fetch(FACILITY_DATA_URL);
           const connRes = await fetch(CONNECTION_DATA_URL);
@@ -537,6 +595,53 @@ const App = () => {
     return map;
   }, [facilities]);
 
+
+  // --- OSRM ROUTE FETCHING (ON-DEMAND) ---
+  useEffect(() => {
+      if (!selectedConnection) return;
+
+      const { oc, cn } = selectedConnection;
+      const routeKey = `${oc}|${cn}`;
+
+      if (routeCache.current[routeKey]) {
+          setActivePaths(prev => ({ ...prev })); 
+          return;
+      }
+
+      const origin = facilityMap[oc];
+      const dest = facilityMap[cn];
+
+      if (!origin || !dest) return;
+
+      const fetchRoute = async () => {
+          try {
+              // Using OSRM driving profile
+              const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson`;
+              const res = await fetch(url);
+              const data = await res.json();
+              
+              if (data.routes && data.routes[0]) {
+                  const routeData = data.routes[0];
+                  const coords = routeData.geometry.coordinates.map(c => [c[1], c[0]]);
+                  const metrics = {
+                      distance: routeData.distance, // meters
+                      duration: routeData.duration // seconds
+                  };
+                  
+                  const dataObj = { coords, metrics };
+                  routeCache.current[routeKey] = dataObj;
+                  setActivePaths(prev => ({ ...prev, [routeKey]: dataObj }));
+              }
+          } catch (e) {
+              console.warn("OSRM Fetch failed for", routeKey, e);
+          }
+      };
+
+      fetchRoute();
+
+  }, [selectedConnection, facilityMap]);
+
+
   useEffect(() => {
     if (appState !== 'READY' || !mapInstanceRef.current || !layerGroupRef.current) return;
     
@@ -554,7 +659,7 @@ const App = () => {
             if (conn.oc === selectedFacility.name) connectedToSelection.add(conn.cn);
             if (conn.cn === selectedFacility.name) connectedToSelection.add(conn.oc);
         });
-        connectedToSelection.add(selectedFacility.name); // Include self
+        connectedToSelection.add(selectedFacility.name); 
     }
 
     // 1. Draw Connections
@@ -590,16 +695,36 @@ const App = () => {
         let color = '#374151';
         let weight = 1;
         let opacity = 0.2; 
-        
-        if (selectedFacility) {
+        let latlngs = [[origin.lat, origin.lng], [dest.lat, dest.lng]]; 
+
+        // Selected Connection Mode
+        if (selectedConnection && selectedConnection.oc === conn.oc && selectedConnection.cn === conn.cn && selectedConnection.vmode === conn.vmode && selectedConnection.cutoff === conn.cutoff) {
+            opacity = 1;
+            weight = 4;
+            color = '#3b82f6'; 
+            
+            const routeKey = `${conn.oc}|${conn.cn}`;
+            if (activePaths[routeKey] && activePaths[routeKey].coords) {
+                latlngs = activePaths[routeKey].coords;
+            }
+        } else if (selectedConnection) {
+            // Hide others if one is selected
+            return; 
+        }
+        else if (selectedFacility) {
             opacity = 0.8;
             weight = 2; 
             const isOutbound = selectedFacility.name === conn.oc;
             color = isOutbound ? '#10b981' : '#f59e0b';
         }
 
-        const polyline = L.polyline([[origin.lat, origin.lng], [dest.lat, dest.lng]], {
+        const polyline = L.polyline(latlngs, {
           color, weight, opacity, smoothFactor: 1
+        });
+
+        polyline.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          handleConnectionClick(conn);
         });
 
         const dist = calculateDistance(origin.lat, origin.lng, dest.lat, dest.lng);
@@ -614,6 +739,7 @@ const App = () => {
                <span class="text-slate-500">TAT:</span> <span class="font-medium">${conn.tat} hrs</span>
                <span class="text-slate-500">Cutoff:</span> <span>${conn.cutoff}</span>
             </div>
+            <div class="text-[9px] text-indigo-500 mt-1 italic text-center">Click to view road path</div>
           </div>
         `;
         polyline.bindTooltip(tooltipContent, { sticky: true, className: 'custom-tooltip' });
@@ -623,11 +749,25 @@ const App = () => {
 
     // 2. Draw Facilities
     facilities.forEach(fac => {
+      // Check Visibility: 
+      // 1. Type enabled?
+      // 2. Selected?
+      // 3. Connected to Selected?
+      // 4. BUT: If NO connections, HIDE (The Clean Map Rule)
+      const stats = globalFacilityStats[fac.name];
+      const hasConnections = stats && (stats.in > 0 || stats.out > 0);
+
+      if (!hasConnections) return; // HIDE ISOLATED FACILITIES
+
       const isSelected = selectedFacility?.name === fac.name;
       const isConnected = selectedFacility && connectedToSelection.has(fac.name);
       
-      // MODIFIED LOGIC: If selected, force show.
-      const isVisible = facTypeFilters[fac.type] || isSelected || isConnected;
+      let isVisible = facTypeFilters[fac.type] || isSelected || isConnected;
+      
+      if (selectedConnection) {
+          if (fac.name === selectedConnection.oc || fac.name === selectedConnection.cn) isVisible = true;
+          else isVisible = false;
+      }
 
       if (!isVisible) return;
 
@@ -638,11 +778,11 @@ const App = () => {
 
       marker.on('click', () => {
         setSelectedFacility(fac);
+        setSelectedConnection(null); 
         mapInstanceRef.current.flyTo([fac.lat, fac.lng], 6, { duration: 1.5 });
       });
 
-      // --- ENHANCED HOVER CARD ---
-      const fStats = globalFacilityStats[fac.name] || { in: 0, out: 0 };
+      const fStats = stats || { in: 0, out: 0 };
       let typeColorClass = 'text-slate-500';
       if (fac.type === 'GW') typeColorClass = 'text-violet-600';
       if (fac.type === 'H') typeColorClass = 'text-blue-600';
@@ -688,12 +828,12 @@ const App = () => {
       bounds.extend([fac.lat, fac.lng]);
     });
 
-    if (hasLayers && !selectedFacility && !mapRef.current.dataset.initialFit) {
+    if (hasLayers && !selectedFacility && !selectedConnection && !mapRef.current.dataset.initialFit) {
       mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50] });
       mapRef.current.dataset.initialFit = "true";
     }
 
-  }, [facilities, connections, selectedFacility, facilityMap, filters, facTypeFilters, appState, globalFacilityStats]);
+  }, [facilities, connections, selectedFacility, selectedConnection, facilityMap, filters, facTypeFilters, appState, globalFacilityStats, activePaths]);
 
 
   // --- STATS HELPER ---
@@ -702,7 +842,6 @@ const App = () => {
       let outbound = connections.filter(c => c.oc === selectedFacility.name);
       let inbound = connections.filter(c => c.cn === selectedFacility.name);
 
-      // 1. Calculate Distances and Attach to Objects
       const processRoute = (route, isOut) => {
          const origin = facilityMap[route.oc];
          const dest = facilityMap[route.cn];
@@ -713,18 +852,15 @@ const App = () => {
       outbound = outbound.map(r => processRoute(r, true));
       inbound = inbound.map(r => processRoute(r, false));
 
-      // 2. RAW Counts
       const rawOutCount = outbound.length;
       const rawInCount = inbound.length;
 
-      // 3. SHIFT CALCULATIONS (on Raw Data)
       const shifts = {
           MORNING: { out: 0, in: 0, out_ftl: 0, out_crt: 0, in_ftl: 0, in_crt: 0 },
           AFTERNOON: { out: 0, in: 0, out_ftl: 0, out_crt: 0, in_ftl: 0, in_crt: 0 },
           NIGHT: { out: 0, in: 0, out_ftl: 0, out_crt: 0, in_ftl: 0, in_crt: 0 }
       };
 
-      // Helper to aggregate shift data
       const aggShift = (list, isOut) => {
           list.forEach(r => {
               const time = isOut ? r.cutoff : r.eta;
@@ -743,14 +879,11 @@ const App = () => {
       aggShift(outbound, true);
       aggShift(inbound, false);
 
-
-      // 4. Apply Global Filters for LIST VIEW
       if (!filters.showOutbound) outbound = [];
       if (!filters.showInbound) inbound = [];
       outbound = outbound.filter(c => filters.vmodes[c.vmode]);
       inbound = inbound.filter(c => filters.vmodes[c.vmode]);
 
-      // 5. Apply Sidebar Pills Filter
       const applySidebarFilter = (list) => {
           if (sidebarFilter === 'ALL') return list;
           if (sidebarFilter === 'FTL') return list.filter(c => c.vmode === 'FTL');
@@ -762,7 +895,6 @@ const App = () => {
       outbound = applySidebarFilter(outbound);
       inbound = applySidebarFilter(inbound);
 
-      // 6. Apply Sorter
       const sortList = (list) => {
           return list.sort((a, b) => {
               let valA, valB;
@@ -788,6 +920,27 @@ const App = () => {
 
   const currentStats = getFacilitySpecificStats();
   const vmodeKeys = Object.keys(filters.vmodes).sort();
+
+  // Helper for OSRM metrics in view
+  const getOSRMInfo = () => {
+      if (!selectedConnection) return null;
+      const key = `${selectedConnection.oc}|${selectedConnection.cn}`;
+      const data = activePaths[key];
+      if (!data || !data.metrics) return null;
+      
+      const distKm = (data.metrics.distance / 1000).toFixed(1);
+      const durStr = formatDuration(data.metrics.duration);
+      const airDist = calculateDistance(
+          facilityMap[selectedConnection.oc].lat, facilityMap[selectedConnection.oc].lng,
+          facilityMap[selectedConnection.cn].lat, facilityMap[selectedConnection.cn].lng
+      );
+      const bufferHours = Math.max(0, (selectedConnection.tat - (data.metrics.duration/3600))).toFixed(1);
+
+      return { distKm, durStr, airDist, bufferHours };
+  };
+
+  const osrmData = getOSRMInfo();
+
 
   if (appState === 'ERROR') {
       return (
@@ -839,6 +992,7 @@ const App = () => {
             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">
                 {facilityStats.active} Facilities <span className="text-slate-300 mx-1">|</span> {connectionStats.valid} Routes
             </p>
+            <TipsTicker />
           </div>
         </div>
 
@@ -854,15 +1008,97 @@ const App = () => {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside className="w-96 bg-white border-r border-slate-200 flex flex-col z-10 shadow-lg relative">
-            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Network Inspector</h3>
-                {selectedFacility && (
-                    <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">FOCUSED</span>
-                )}
-            </div>
+            
+            {/* Conditional Sidebar Header based on Mode */}
+            {selectedConnection ? (
+               <div className="p-4 border-b border-slate-100 bg-blue-50/80 flex items-center gap-2 animate-fadeIn">
+                   <button onClick={() => setSelectedConnection(null)} className="p-1 rounded-full hover:bg-white text-blue-600 transition-colors"><ArrowLeft size={16}/></button>
+                   <div>
+                       <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Route Focus</div>
+                       <div className="text-sm font-bold text-blue-800 leading-tight">{selectedConnection.oc} ➝ {selectedConnection.cn}</div>
+                   </div>
+               </div>
+            ) : (
+               <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Network Inspector</h3>
+                   {selectedFacility && (
+                       <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">FOCUSED</span>
+                   )}
+               </div>
+            )}
 
             <div className="flex-1 overflow-y-auto p-4 pb-20">
-                {selectedFacility && currentStats ? (
+                {selectedConnection ? (
+                    // ROUTE DETAIL VIEW WITH METRICS
+                    <div className="space-y-4 animate-fadeIn">
+                        <div className="bg-white border border-blue-200 rounded-lg p-4 shadow-sm">
+                            
+                            {/* TIMELINE VISUALIZATION */}
+                            <div className="flex justify-between items-end mb-1">
+                                <div className="text-left">
+                                    <div className="text-[10px] font-bold text-slate-400">START</div>
+                                    <div className="text-lg font-black text-slate-800">{selectedConnection.cutoff}</div>
+                                </div>
+                                <div className="flex-1 mx-3 pb-2">
+                                     <div className="flex justify-between text-[9px] text-slate-400 font-mono mb-1">
+                                         <span>Drive {osrmData ? osrmData.durStr : '...'}</span>
+                                         <span>Total TAT {selectedConnection.tat}h</span>
+                                     </div>
+                                     <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden flex">
+                                         {/* Drive Segment */}
+                                         <div className="h-full bg-indigo-500" style={{ width: osrmData ? `${Math.min(100, (activePaths[`${selectedConnection.oc}|${selectedConnection.cn}`]?.metrics.duration / 3600 / selectedConnection.tat) * 100)}%` : '50%' }}></div>
+                                         {/* Buffer Segment */}
+                                         <div className="h-full bg-emerald-400" style={{ flex: 1 }}></div>
+                                     </div>
+                                     <div className="text-[8px] text-center text-emerald-600 font-bold mt-1">
+                                         {osrmData ? `+ ${osrmData.bufferHours}h Buffer (Loading/Rest)` : 'Calculating...'}
+                                     </div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-[10px] font-bold text-slate-400">ARRIVE</div>
+                                    <div className="text-lg font-black text-slate-800">{selectedConnection.eta}</div>
+                                </div>
+                            </div>
+
+                            <div className="h-px bg-slate-100 my-4"></div>
+
+                            {/* METRICS GRID */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mb-1">
+                                        <Truck size={12}/> Actual Road Dist.
+                                    </div>
+                                    <div className="text-xl font-black text-indigo-600">
+                                        {osrmData ? osrmData.distKm : <Loader2 size={16} className="animate-spin inline"/>} <span className="text-xs font-normal text-slate-400">km</span>
+                                    </div>
+                                    {osrmData && (
+                                        <div className="text-[9px] text-slate-400 mt-0.5">
+                                            vs {osrmData.airDist} km (Air)
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mb-1">
+                                        <Timer size={12}/> Est. Drive Time
+                                    </div>
+                                    <div className="text-xl font-black text-indigo-600">
+                                        {osrmData ? osrmData.durStr : <Loader2 size={16} className="animate-spin inline"/>}
+                                    </div>
+                                    <div className="text-[9px] text-slate-400 mt-0.5">
+                                        Avg Speed: {osrmData ? Math.round(osrmData.distKm / (activePaths[`${selectedConnection.oc}|${selectedConnection.cn}`].metrics.duration / 3600)) : '-'} km/h
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="mt-3 flex gap-2 text-xs">
+                                <span className="bg-slate-100 px-2 py-1 rounded text-slate-600 font-bold border border-slate-200">{selectedConnection.vehicle_size}</span>
+                                <span className="bg-slate-100 px-2 py-1 rounded text-slate-600 font-bold border border-slate-200">{selectedConnection.vmode}</span>
+                            </div>
+                        </div>
+                        <button onClick={() => setSelectedConnection(null)} className="w-full py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded transition-colors">Return to Hub View</button>
+                    </div>
+                ) : selectedFacility && currentStats ? (
+                    // FACILITY DETAIL VIEW
                     <div className="space-y-6 animate-fadeIn">
                         {/* Selected Hub Header with Summary */}
                         <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm relative group">
@@ -1009,7 +1245,7 @@ const App = () => {
                                     {currentStats.outbound.length === 0 ? 
                                         <div className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded border border-slate-100 text-center">No outbound routes match current filters.</div> :
                                     currentStats.outbound.map((conn, idx) => (
-                                        <div key={idx} className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-lg hover:bg-emerald-50 transition-colors shadow-sm">
+                                        <div key={idx} onClick={() => handleConnectionClick(conn)} className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-lg hover:bg-emerald-50 transition-colors shadow-sm cursor-pointer hover:border-emerald-300">
                                             <div className="flex justify-between items-start mb-2">
                                                 <span className="text-sm font-bold text-emerald-900">{conn.cn}</span>
                                                 <div className="flex flex-col items-end">
@@ -1048,7 +1284,7 @@ const App = () => {
                                     {currentStats.inbound.length === 0 ? 
                                         <div className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded border border-slate-100 text-center">No inbound routes match current filters.</div> :
                                     currentStats.inbound.map((conn, idx) => (
-                                        <div key={idx} className="bg-amber-50/50 border border-amber-100 p-3 rounded-lg hover:bg-amber-50 transition-colors shadow-sm">
+                                        <div key={idx} onClick={() => handleConnectionClick(conn)} className="bg-amber-50/50 border border-amber-100 p-3 rounded-lg hover:bg-amber-50 transition-colors shadow-sm cursor-pointer hover:border-amber-300">
                                             <div className="flex justify-between items-start mb-2">
                                                 <span className="text-sm font-bold text-amber-900">{conn.oc}</span>
                                                 <div className="flex flex-col items-end">
