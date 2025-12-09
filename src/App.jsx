@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed, Sparkles, Route as RouteIcon, ArrowLeft, Timer, Activity, TrendingUp, Lightbulb, Lock, Unlock, Zap, Satellite, BarChart3, Gauge, Milestone, List, PieChart, Info, Bell, ShieldCheck, CheckCircle2, Cpu, Globe, WifiOff, Settings, CornerUpLeft, CornerUpRight, Move, Ban } from 'lucide-react';
+import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed, Sparkles, Route as RouteIcon, ArrowLeft, Timer, Activity, TrendingUp, Lightbulb, Lock, Unlock, Zap, Satellite, BarChart3, Gauge, Milestone, List, PieChart, Info, Bell, ShieldCheck, CheckCircle2, Cpu, Globe, WifiOff, Settings, CornerUpLeft, CornerUpRight, Move, Ban, Eye } from 'lucide-react';
 
 // ==========================================
 // 1. DATA SOURCE CONFIGURATION
@@ -8,6 +8,42 @@ import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircl
 const FACILITY_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vStGLrqXIxCAtIaFRYfQW0V7L1Or2uOL-vyXMMqOf1hnx6GdYrn1Y_yY3ex3VIKsKfremF-GtC_X7_P/pub?output=csv";
 const CONNECTION_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQRUpjmmU-vIisjGmoF8Mv5E6qyuetEG_iIWj6i_HDFPH7BYcY-juDFpj2V6UOAz-95d2EhpTeFW-7J/pub?output=csv";
 const MAPBOX_TOKEN = "pk.eyJ1IjoicmFodWxwaCIsImEiOiJjbWZpbTVnMnYwbjg3MmxweTRmcG1rdDNtIn0.mIOYkpIEShhheDWZ8BvtHA";
+
+// Map Layer Configuration
+const MAP_STYLES = [
+    { 
+        id: 'google_terrain', 
+        name: 'Terrain (Default)', 
+        icon: <MapIcon size={14}/>,
+        url: 'https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', 
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+        attribution: '&copy; Google Maps' 
+    },
+    { 
+        id: 'google_hybrid', 
+        name: 'Satellite Hybrid', 
+        icon: <Satellite size={14}/>,
+        url: 'https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', 
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+        attribution: '&copy; Google Maps' 
+    },
+    { 
+        id: 'carto_dark', 
+        name: 'Dark Matter', 
+        icon: <Moon size={14}/>,
+        url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', 
+        subdomains: ['a', 'b', 'c', 'd'],
+        attribution: '&copy; CartoDB' 
+    },
+    { 
+        id: 'carto_light', 
+        name: 'Positron (Light)', 
+        icon: <Sun size={14}/>,
+        url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', 
+        subdomains: ['a', 'b', 'c', 'd'],
+        attribution: '&copy; CartoDB' 
+    }
+];
 
 // Loading Screen Tips Data
 const LOADING_TIPS = [
@@ -304,7 +340,8 @@ const App = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showFilters, setShowFilters] = useState(true); // For sidebar accordion
   const [showSlowGenWarning, setShowSlowGenWarning] = useState(false);
-
+  const [showMapLayers, setShowMapLayers] = useState(false); // Map layer selector
+  const [currentMapStyle, setCurrentMapStyle] = useState(MAP_STYLES[0]); // Default to Terrain
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -332,6 +369,7 @@ const App = () => {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const layerGroupRef = useRef(null);
+  const tileLayerRef = useRef(null); // Reference to the tile layer for switching
   const initTimerRef = useRef(null);
   const safetyTimerRef = useRef(null);
 
@@ -562,13 +600,11 @@ const App = () => {
         if (!mapInstanceRef.current) {
             const map = window.L.map(mapRef.current).setView([22.5937, 78.9629], 5);
             
-            window.L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
-                maxZoom: 20,
-                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
-                attribution: '&copy; Google Maps'
-            }).addTo(map);
+            // NOTE: We do NOT add tile layer here anymore.
+            // The useEffect below handles tile layer addition/switching.
 
-            layerGroupRef.current = window.L.layerGroup().addTo(map);
+            // Use featureGroup instead of layerGroup to allow bringToFront
+            layerGroupRef.current = window.L.featureGroup().addTo(map);
             mapInstanceRef.current = map;
         }
         if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
@@ -579,6 +615,35 @@ const App = () => {
         setStatusMsg('Map Initialization Failed: ' + err.message);
     }
   };
+
+  // --- MAP LAYER SWITCHER EFFECT ---
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.L) return;
+
+    // Remove old layer if exists
+    if (tileLayerRef.current) {
+        tileLayerRef.current.remove();
+    }
+
+    // Create new layer
+    tileLayerRef.current = window.L.tileLayer(currentMapStyle.url, {
+        maxZoom: 20,
+        subdomains: currentMapStyle.subdomains,
+        attribution: currentMapStyle.attribution
+    });
+
+    // Add to map
+    tileLayerRef.current.addTo(mapInstanceRef.current);
+
+    // IMPORTANT: Move tile layer to back so it doesn't cover markers
+    tileLayerRef.current.bringToBack();
+    
+    // Ensure overlays are on top
+    if (layerGroupRef.current && layerGroupRef.current.bringToFront) {
+        layerGroupRef.current.bringToFront();
+    }
+
+  }, [currentMapStyle, areScriptsLoaded, appState]); // Runs when map style changes or map is ready
 
   const loadData = async () => {
       setLoadingProgress(5);
@@ -905,7 +970,19 @@ const App = () => {
         if (!isFocused) {
             if (cachedData && cachedData.coords) latlngs = cachedData.coords;
             let color = '#334155'; let weight = 1.5; let opacity = 0.5;
-            if (selectedFacility) { opacity = 0.9; weight = 2.5; const isOutbound = selectedFacility.name === conn.oc; color = isOutbound ? '#059669' : '#d97706'; }
+            
+            // Adjust colors for Dark Mode to be more visible
+            const isDarkMode = currentMapStyle.id.includes('dark');
+            const defaultLineColor = isDarkMode ? '#cbd5e1' : '#334155'; // Lighter slate for dark mode
+
+            if (selectedFacility) { 
+                opacity = 0.9; weight = 2.5; 
+                const isOutbound = selectedFacility.name === conn.oc; 
+                color = isOutbound ? '#059669' : '#d97706'; 
+            } else {
+                color = defaultLineColor;
+            }
+
             const polyline = L.polyline(latlngs, { color, weight, opacity, smoothFactor: 1 });
             polyline.on('click', (e) => { L.DomEvent.stopPropagation(e); handleConnectionClick(conn); });
             polyline.addTo(layerGroup);
@@ -940,6 +1017,12 @@ const App = () => {
       if (!isVisible) return;
       hasLayers = true;
       const style = getFacilityStyle(fac.type, isSelected);
+      
+      // Adjust border color for dark mode visibility
+      if (currentMapStyle.id.includes('dark') && !isSelected) {
+          style.color = '#94a3b8'; // Lighter border in dark mode
+      }
+
       const marker = L.circleMarker([fac.lat, fac.lng], style);
       marker.on('click', () => { setSelectedFacility(fac); setSelectedConnection(null); mapInstanceRef.current.flyTo([fac.lat, fac.lng], 6, { duration: 1.5 }); });
       const fStats = stats || { in: 0, out: 0 };
@@ -954,7 +1037,7 @@ const App = () => {
       mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50] });
       mapRef.current.dataset.initialFit = "true";
     }
-  }, [facilities, connections, selectedFacility, selectedConnection, facilityMap, filters, facTypeFilters, appState, globalFacilityStats, activePaths]);
+  }, [facilities, connections, selectedFacility, selectedConnection, facilityMap, filters, facTypeFilters, appState, globalFacilityStats, activePaths, currentMapStyle]);
 
   const getFacilitySpecificStats = () => {
       if (!selectedFacility) return null;
@@ -1867,8 +1950,45 @@ const App = () => {
           {/* Facility Type Filters (Top Right) - Collapsible */}
           {appState === 'READY' && (
               <div className="absolute top-4 right-4 z-[400] flex flex-col items-end gap-2">
+                  
+                  {/* MAP LAYER SELECTOR BUTTON */}
+                  <div className="relative">
+                      <button 
+                         onClick={() => { setShowMapLayers(!showMapLayers); setShowFacLegend(false); }}
+                         className={`bg-white/90 backdrop-blur p-2.5 rounded-full shadow-lg text-slate-600 hover:text-indigo-600 hover:bg-white transition-all border border-slate-200 ${showMapLayers ? 'ring-2 ring-indigo-100 text-indigo-600' : ''}`}
+                         title="Map Layers"
+                      >
+                          <Layers size={20} strokeWidth={2} />
+                      </button>
+
+                       {/* Map Layer Dropdown */}
+                       {showMapLayers && (
+                        <div className="absolute top-12 right-0 bg-white/90 backdrop-blur-md p-3 rounded-xl shadow-2xl text-xs border border-slate-200/50 w-48 animate-fadeIn origin-top-right z-[500]">
+                            <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-100">
+                               <h4 className="font-bold text-slate-800 uppercase text-[10px] tracking-widest">Base Map</h4>
+                               <button onClick={() => setShowMapLayers(false)} className="text-slate-400 hover:text-slate-600"><X size={14}/></button>
+                            </div>
+                            <div className="space-y-1">
+                                {MAP_STYLES.map(style => (
+                                    <button 
+                                        key={style.id}
+                                        onClick={() => setCurrentMapStyle(style)}
+                                        className={`w-full flex items-center gap-3 p-2 rounded transition-all text-left ${currentMapStyle.id === style.id ? 'bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold' : 'hover:bg-slate-50 border border-transparent text-slate-600'}`}
+                                    >
+                                        <div className={`p-1.5 rounded-md ${currentMapStyle.id === style.id ? 'bg-indigo-200 text-indigo-700' : 'bg-slate-100 text-slate-400'}`}>
+                                            {style.icon}
+                                        </div>
+                                        <span>{style.name}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                      )}
+                  </div>
+
+                  {/* FACILITY FILTER BUTTON */}
                   <button 
-                     onClick={() => setShowFacLegend(!showFacLegend)}
+                     onClick={() => { setShowFacLegend(!showFacLegend); setShowMapLayers(false); }}
                      className={`bg-white/90 backdrop-blur p-2.5 rounded-full shadow-lg text-slate-600 hover:text-indigo-600 hover:bg-white transition-all border border-slate-200 ${showFacLegend ? 'ring-2 ring-indigo-100 text-indigo-600' : ''}`}
                      title="Facility Filters"
                   >
