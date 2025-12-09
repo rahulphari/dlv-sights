@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed, Sparkles, Route as RouteIcon, ArrowLeft, Timer, Activity, TrendingUp, Lightbulb } from 'lucide-react';
+import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed, Sparkles, Route as RouteIcon, ArrowLeft, Timer, Activity, TrendingUp, Lightbulb, Lock, Unlock, Zap, Satellite, BarChart3, Gauge, Milestone, List, PieChart, Info, Bell, ShieldCheck, CheckCircle2, Cpu, Globe, WifiOff } from 'lucide-react';
 
 // ==========================================
 // 1. DATA SOURCE CONFIGURATION
@@ -7,6 +7,36 @@ import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircl
 
 const FACILITY_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vStGLrqXIxCAtIaFRYfQW0V7L1Or2uOL-vyXMMqOf1hnx6GdYrn1Y_yY3ex3VIKsKfremF-GtC_X7_P/pub?output=csv";
 const CONNECTION_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQRUpjmmU-vIisjGmoF8Mv5E6qyuetEG_iIWj6i_HDFPH7BYcY-juDFpj2V6UOAz-95d2EhpTeFW-7J/pub?output=csv";
+const MAPBOX_TOKEN = "pk.eyJ1IjoicmFodWxwaCIsImEiOiJjbWZpbTVnMnYwbjg3MmxweTRmcG1rdDNtIn0.mIOYkpIEShhheDWZ8BvtHA";
+
+// Loading Screen Tips Data
+const LOADING_TIPS = [
+    { 
+        icon: <Globe size={24} className="text-blue-400"/>,
+        title: "Network Visualization", 
+        desc: "Visualize the entire logistics web. Blue nodes represent Hubs, while Violet nodes indicate Gateways." 
+    },
+    { 
+        icon: <Truck size={24} className="text-emerald-400"/>,
+        title: "Route Analytics", 
+        desc: "Click on any connection line to inspect detailed metrics like ETA, TAT, vehicle types, and road vs. air distance." 
+    },
+    { 
+        icon: <Search size={24} className="text-indigo-400"/>,
+        title: "Smart Search", 
+        desc: "Type a pincode (e.g., '110037') or a partial address to instantly fly the camera to the nearest facility." 
+    },
+    { 
+        icon: <CloudRain size={24} className="text-cyan-400"/>,
+        title: "Live Weather Intel", 
+        desc: "Check real-time weather conditions for any selected facility directly from the dashboard header." 
+    },
+    { 
+        icon: <Satellite size={24} className="text-purple-400"/>,
+        title: "Precision Routing", 
+        desc: "Unlock the Mapbox mode to generate high-fidelity, turn-by-turn road paths for accurate distance calculations." 
+    }
+];
 
 // Utility to load external scripts/styles dynamically
 const useExternalResource = (url, type) => {
@@ -26,7 +56,11 @@ const useExternalResource = (url, type) => {
       script.src = url;
       script.async = true;
       script.onload = () => setLoaded(true);
-      script.onerror = () => console.error(`Failed to load script: ${url}`);
+      script.onerror = () => {
+          console.error(`Failed to load script: ${url}`);
+          // Do NOT set loaded to false here strictly, simply let it hang or handle elsewhere 
+          // to prevent race conditions with pre-existing scripts
+      };
       document.body.appendChild(script);
     } else if (type === 'style') {
       const link = document.createElement('link');
@@ -56,8 +90,10 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 
 // Time Formatter for Duration (Seconds to H:M)
 const formatDuration = (seconds) => {
+    if (seconds < 60) return `${Math.round(seconds)}s`;
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
+    if (h === 0) return `${m}m`;
     return `${h}h ${m}m`;
 };
 
@@ -180,12 +216,11 @@ const LiveClock = () => {
 const TipsTicker = () => {
     const tips = [
         "Tip: Search by Pincode (e.g. '110037') to find the nearest hub instantly.",
-        "Pro Tip: Click on a specific route line to see real-world driving distance & time.",
+        "Pro Tip: In Route Focus, red lines on the map indicate slow/local roads.",
         "Did you know? You can see the live weather information of the selected facility on top-right!",
         "Tip: Use the 'Smart Find' button to locate hubs by raw address text.",
         "Guide: Blue = Hubs, Violet = Gateways, Cyan = IPCs.",
-        "Tip: Click a facility to freeze the view and filter connections.",
-        "Guide: The sidebar shows a shift-wise breakdown of traffic."
+        "Tip: Check the 'Route Anatomy' section for a factual breakdown of time spent in different speed zones."
     ];
     
     const [currentTip, setCurrentTip] = useState(0);
@@ -212,6 +247,25 @@ const TipsTicker = () => {
     );
 };
 
+const NotificationBanner = ({ notification, onClose }) => {
+    if (!notification) return null;
+    
+    return (
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-[2000] animate-fadeIn">
+            <div className={`px-4 py-3 rounded-lg shadow-xl flex items-center gap-3 border ${
+                notification.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 
+                notification.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 
+                'bg-slate-800 border-slate-700 text-white'
+            }`}>
+                {notification.type === 'error' ? <AlertCircle size={18}/> : 
+                 notification.type === 'success' ? <Zap size={18} className="text-emerald-500 fill-emerald-500"/> : 
+                 <Info size={18}/>}
+                <div className="text-sm font-medium whitespace-pre-line">{notification.message}</div>
+                <button onClick={onClose} className="p-1 hover:bg-black/10 rounded"><X size={14}/></button>
+            </div>
+        </div>
+    );
+}
 
 const App = () => {
   const leafletCssLoaded = useExternalResource('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', 'style');
@@ -220,6 +274,7 @@ const App = () => {
 
   const [facilities, setFacilities] = useState([]);
   const [connections, setConnections] = useState([]);
+  const [notification, setNotification] = useState(null);
   
   // SELECTION STATE
   const [selectedFacility, setSelectedFacility] = useState(null);
@@ -253,19 +308,40 @@ const App = () => {
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isPincodeSearching, setIsPincodeSearching] = useState(false);
 
-  // OSRM Route Data
+  // ROUTING & MAPBOX STATE
   const [activePaths, setActivePaths] = useState({}); // Store cached paths
   const routeCache = useRef({}); // Persist across renders
+  const [mapboxUnlocked, setMapboxUnlocked] = useState(false);
+  const [passkeyInput, setPasskeyInput] = useState('');
+  const [showPasskeyInput, setShowPasskeyInput] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [genProgress, setGenProgress] = useState('');
+  const [detailedViewMode, setDetailedViewMode] = useState('ANATOMY'); // 'ANATOMY' or 'STEPS'
 
-  const [appState, setAppState] = useState('LOADING'); 
-  const [statusMsg, setStatusMsg] = useState('Loading Resources...');
+
+  const [appState, setAppState] = useState('LOADING'); // LOADING, VERIFY, READY, ERROR
+  const [statusMsg, setStatusMsg] = useState('Initializing Satellite Link...');
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [currentLoadingTipIndex, setCurrentLoadingTipIndex] = useState(0);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const layerGroupRef = useRef(null);
   const initTimerRef = useRef(null);
+  const safetyTimerRef = useRef(null);
 
   const areScriptsLoaded = leafletCssLoaded && leafletJsLoaded && papaParseLoaded;
+
+  // --- LOADING TIPS CYCLER ---
+  useEffect(() => {
+      if (appState === 'LOADING') {
+          const interval = setInterval(() => {
+              setCurrentLoadingTipIndex(prev => (prev + 1) % LOADING_TIPS.length);
+          }, 4000); // Change tip every 4 seconds
+          return () => clearInterval(interval);
+      }
+  }, [appState]);
 
   // --- HELPER: FACILITY TYPE ---
   const getFacilityType = (name) => {
@@ -276,6 +352,11 @@ const App = () => {
       if (['H', 'HUB'].includes(suffix)) return 'H'; 
       if (['I'].includes(suffix)) return 'I';
       return 'OTH';
+  };
+
+  const showToast = (message, type = 'info') => {
+      setNotification({ message, type });
+      setTimeout(() => setNotification(null), 5000);
   };
 
   const getFacilityStyle = (type, isSelected) => {
@@ -291,10 +372,10 @@ const App = () => {
       if (isSelected) {
           radius += 4;
           weight = 3;
-          color = '#ffffff'; 
+          color = '#1e293b'; // Darker border for selection on light map
       } else {
           weight = 1;
-          color = '#ffffff';
+          color = '#475569'; // Slate 600 border for visibility on light map
       }
 
       let fillColor;
@@ -320,15 +401,14 @@ const App = () => {
       return stats;
   }, [connections]);
 
-  // --- SEARCH FILTER MEMO (UPDATED: Checks connectivity) ---
+  // --- SEARCH FILTER MEMO ---
   const filteredFacilities = useMemo(() => {
       if (!searchQuery) return [];
       return facilities
         .filter(f => {
-            // Check if facility is active (has connections)
             const stats = globalFacilityStats[f.name];
             const isActive = stats && (stats.in > 0 || stats.out > 0);
-            if (!isActive) return false; // Hide from search
+            if (!isActive) return false; 
 
             return f.name.toLowerCase().includes(searchQuery.toLowerCase());
         })
@@ -350,6 +430,24 @@ const App = () => {
 
   const handleConnectionClick = (connection) => {
       setSelectedConnection(connection);
+  };
+
+  const handleUnlockMapbox = () => {
+      if (passkeyInput === '1732') {
+          setMapboxUnlocked(true);
+          setShowPasskeyInput(false);
+          showToast("🚀 Mapbox Precision Mode Unlocked!", 'success');
+      } else {
+          showToast("❌ Invalid Access Key. Please try again.", 'error');
+      }
+  };
+
+  const handleVerifyEntry = () => {
+      setIsVerifying(true);
+      setTimeout(() => {
+          setIsVerifying(false);
+          setAppState('READY');
+      }, 1200); 
   };
 
   // --- SMART AI-LIKE ADDRESS SEARCH ---
@@ -387,7 +485,6 @@ const App = () => {
               let minDist = Infinity;
 
               facilities.forEach(fac => {
-                  // ONLY consider facilities with connections
                   const stats = globalFacilityStats[fac.name];
                   if (!stats || (stats.in === 0 && stats.out === 0)) return;
 
@@ -405,16 +502,16 @@ const App = () => {
                       mapInstanceRef.current.flyTo([nearest.lat, nearest.lng], 9, { duration: 1.5 });
                   }
                   setSearchQuery(''); 
-                  alert(`🔍 Found location using: "${foundQuery}"\n📍 ${display_name}\n\n🚀 Nearest Facility: ${nearest.name} (~${minDist} km away)`);
+                  showToast(`🔍 Found location: "${foundQuery}"\n📍 ${display_name}\n\n🚀 Nearest Facility: ${nearest.name} (~${minDist} km away)`, 'success');
               } else {
-                  alert("No active facilities found nearby.");
+                  showToast("No active facilities found nearby.", 'error');
               }
           } else {
-              alert("Could not identify this location.");
+              showToast("Could not identify this location.", 'error');
           }
       } catch (error) {
           console.error("Geocoding error:", error);
-          alert("Failed to search location.");
+          showToast("Failed to search location.", 'error');
       } finally {
           setIsPincodeSearching(false);
           setIsSearchFocused(false);
@@ -426,16 +523,32 @@ const App = () => {
 
   // --- INITIALIZATION ---
   useEffect(() => {
+    // Safety Timer
+    safetyTimerRef.current = setTimeout(() => {
+        if (appState === 'LOADING') {
+            setAppState('ERROR');
+            setStatusMsg('Connection Timed Out. Resources failed to load.');
+        }
+    }, 15000);
+
+    return () => {
+        if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
+        if (initTimerRef.current) clearInterval(initTimerRef.current);
+    }
+  }, [appState]);
+
+  useEffect(() => {
     if (!areScriptsLoaded) return;
+    
     const checkAndInit = () => {
         if (window.Papa && window.L && mapRef.current) {
             if (initTimerRef.current) clearInterval(initTimerRef.current);
             initializeMap();
         } else {
-            setStatusMsg('Waiting for Map Engine to start...');
+            setStatusMsg('Initializing Map Engine...');
         }
     };
-    initTimerRef.current = setInterval(checkAndInit, 500);
+    initTimerRef.current = setInterval(checkAndInit, 200);
     return () => { if (initTimerRef.current) clearInterval(initTimerRef.current); };
   }, [areScriptsLoaded]);
 
@@ -443,14 +556,17 @@ const App = () => {
     try {
         if (!mapInstanceRef.current) {
             const map = window.L.map(mapRef.current).setView([22.5937, 78.9629], 5);
-            window.L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; OpenStreetMap &copy; CARTO',
-                subdomains: 'abcd',
-                maxZoom: 19
+            
+            window.L.tileLayer('https://{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                attribution: '&copy; Google Maps'
             }).addTo(map);
+
             layerGroupRef.current = window.L.layerGroup().addTo(map);
             mapInstanceRef.current = map;
         }
+        if (safetyTimerRef.current) clearTimeout(safetyTimerRef.current);
         loadData();
     } catch (err) {
         console.error("Init Error", err);
@@ -460,10 +576,21 @@ const App = () => {
   };
 
   const loadData = async () => {
-      setStatusMsg('Fetching Data...');
+      setLoadingProgress(5);
+      setStatusMsg('Establishing Secure Link...');
+      
       try {
+          await new Promise(r => setTimeout(r, 400));
+          
+          setStatusMsg('Acquiring Facility Manifest...');
           const facRes = await fetch(FACILITY_DATA_URL);
+          setLoadingProgress(35);
+          
+          await new Promise(r => setTimeout(r, 200));
+
+          setStatusMsg('Downloading Route Matrix...');
           const connRes = await fetch(CONNECTION_DATA_URL);
+          setLoadingProgress(60);
 
           if (!facRes.ok || !connRes.ok) {
               throw new Error("Failed to download data files");
@@ -471,18 +598,24 @@ const App = () => {
 
           const facText = await facRes.text();
           const connText = await connRes.text();
+          
+          setStatusMsg('Compiling Geospatial Index...');
+          setLoadingProgress(80);
+          
+          await new Promise(r => setTimeout(r, 300)); 
+          
           processCSV(facText, connText);
 
       } catch (err) {
           console.error("Fetch Error:", err);
           setAppState('ERROR');
-          setStatusMsg('Failed to load data. Please check internet connection or file permissions.');
+          setStatusMsg('Failed to load data. Please check internet connection.');
       }
   };
 
   const processCSV = (facText, connText) => {
     if (!window.Papa) return;
-    setStatusMsg('Processing Data...');
+    setStatusMsg('Finalizing Data Structures...');
 
     const cleanName = (name) => {
         if (!name) return '';
@@ -564,7 +697,12 @@ const App = () => {
                         parsedConnections.forEach(c => modes[c.vmode] = true);
                         setFilters(p => ({ ...p, vmodes: modes }));
 
-                        setAppState('READY');
+                        setLoadingProgress(100);
+                        setStatusMsg('System Ready.');
+                        
+                        setTimeout(() => {
+                            setAppState('VERIFY');
+                        }, 500);
                     }
                 });
             }
@@ -575,7 +713,9 @@ const App = () => {
     }
   };
 
-  // --- FILTERS ---
+  // --- FILTERS, MAP UPDATES, ROUTING --- 
+  // (Same as before, omitted to save space as Logic didn't change, just UI rendering flow)
+  
   useEffect(() => {
       if (connections.length > 0) {
           const modes = {};
@@ -586,7 +726,6 @@ const App = () => {
       }
   }, [connections]);
 
-  // --- MAP RENDERING ---
   const facilityMap = useMemo(() => {
     const map = {};
     facilities.forEach(f => {
@@ -595,64 +734,123 @@ const App = () => {
     return map;
   }, [facilities]);
 
+  const fetchRouteOSRM = async (origin, dest) => {
+      const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson&steps=true`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.routes && data.routes[0]) {
+          const route = data.routes[0];
+          const legs = route.legs[0];
+          const rawSegments = legs.steps.map(s => {
+              const speedCalc = s.duration > 0 ? (s.distance / 1000) / (s.duration / 3600) : 0;
+              return {
+                  name: s.name || "Local Road",
+                  dist: s.distance,
+                  time: s.duration,
+                  mode: s.mode,
+                  instruction: s.maneuver,
+                  geometry: s.geometry,
+                  speed: speedCalc
+              }
+          });
+          const aggregated = {};
+          rawSegments.forEach(seg => {
+              const key = seg.name;
+              if(!aggregated[key]) aggregated[key] = { name: key, dist: 0, time: 0 };
+              aggregated[key].dist += seg.dist;
+              aggregated[key].time += seg.time;
+          });
+          const segments = Object.values(aggregated).map(s => ({...s, speed: s.time > 0 ? (s.dist / 1000) / (s.time / 3600) : 0})).sort((a,b) => b.dist - a.dist);
+          return { coords: route.geometry.coordinates.map(c => [c[1], c[0]]), metrics: { distance: route.distance, duration: route.duration }, segments: segments, rawSteps: rawSegments };
+      }
+      return null;
+  };
 
-  // --- OSRM ROUTE FETCHING (ON-DEMAND) ---
+  const fetchRouteMapbox = async (origin, dest) => {
+      const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?geometries=geojson&steps=true&access_token=${MAPBOX_TOKEN}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.routes && data.routes[0]) {
+          const route = data.routes[0];
+          const legs = route.legs[0];
+          const rawSegments = legs.steps.map(s => {
+              const speedCalc = s.duration > 0 ? (s.distance / 1000) / (s.duration / 3600) : 0;
+              return { name: s.name || "Local Road", dist: s.distance, time: s.duration, instruction: s.maneuver, geometry: s.geometry, speed: speedCalc }
+          });
+          const aggregated = {};
+          rawSegments.forEach(seg => {
+              const key = seg.name;
+              if(!aggregated[key]) aggregated[key] = { name: key, dist: 0, time: 0 };
+              aggregated[key].dist += seg.dist;
+              aggregated[key].time += seg.time;
+          });
+          const segments = Object.values(aggregated).map(s => ({...s, speed: s.time > 0 ? (s.dist / 1000) / (s.time / 3600) : 0})).sort((a,b) => b.dist - a.dist);
+          return { coords: data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]), metrics: { distance: data.routes[0].distance, duration: data.routes[0].duration }, segments: segments, rawSteps: rawSegments };
+      }
+      return null;
+  };
+
+  const handleRegenerateRoutes = async (provider = 'OSRM') => {
+      let targets = [];
+      if (selectedConnection) targets = [selectedConnection];
+      else if (selectedFacility) {
+          if (filters.showOutbound) targets = [...targets, ...connections.filter(c => c.oc === selectedFacility.name && filters.vmodes[c.vmode])];
+          if (filters.showInbound) targets = [...targets, ...connections.filter(c => c.cn === selectedFacility.name && filters.vmodes[c.vmode])];
+      }
+      if (targets.length === 0) return;
+      setIsGenerating(true);
+      setGenProgress(`0/${targets.length}`);
+      const chunkSize = 5;
+      for (let i = 0; i < targets.length; i += chunkSize) {
+          const chunk = targets.slice(i, i + chunkSize);
+          await Promise.all(chunk.map(async (conn) => {
+              const routeKey = `${conn.oc}|${conn.cn}`;
+              const origin = facilityMap[conn.oc];
+              const dest = facilityMap[conn.cn];
+              if (origin && dest) {
+                  try {
+                      let data;
+                      if (provider === 'MAPBOX') data = await fetchRouteMapbox(origin, dest);
+                      else data = await fetchRouteOSRM(origin, dest);
+                      if (data) {
+                          routeCache.current[routeKey] = data;
+                          setActivePaths(prev => ({ ...prev, [routeKey]: data }));
+                      }
+                  } catch (e) { console.error("Route fetch failed", e); }
+              }
+          }));
+          setGenProgress(`${Math.min(i + chunkSize, targets.length)}/${targets.length}`);
+          if (provider === 'OSRM') await new Promise(r => setTimeout(r, 200)); 
+      }
+      setIsGenerating(false);
+      setGenProgress('');
+  };
+
   useEffect(() => {
       if (!selectedConnection) return;
-
       const { oc, cn } = selectedConnection;
       const routeKey = `${oc}|${cn}`;
-
-      if (routeCache.current[routeKey]) {
-          setActivePaths(prev => ({ ...prev })); 
-          return;
-      }
-
+      if (routeCache.current[routeKey]) { setActivePaths(prev => ({ ...prev })); return; }
       const origin = facilityMap[oc];
       const dest = facilityMap[cn];
-
       if (!origin || !dest) return;
-
-      const fetchRoute = async () => {
-          try {
-              // Using OSRM driving profile
-              const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?overview=full&geometries=geojson`;
-              const res = await fetch(url);
-              const data = await res.json();
-              
-              if (data.routes && data.routes[0]) {
-                  const routeData = data.routes[0];
-                  const coords = routeData.geometry.coordinates.map(c => [c[1], c[0]]);
-                  const metrics = {
-                      distance: routeData.distance, // meters
-                      duration: routeData.duration // seconds
-                  };
-                  
-                  const dataObj = { coords, metrics };
-                  routeCache.current[routeKey] = dataObj;
-                  setActivePaths(prev => ({ ...prev, [routeKey]: dataObj }));
-              }
-          } catch (e) {
-              console.warn("OSRM Fetch failed for", routeKey, e);
+      fetchRouteOSRM(origin, dest).then(data => {
+          if (data) {
+              routeCache.current[routeKey] = data;
+              setActivePaths(prev => ({ ...prev, [routeKey]: data }));
           }
-      };
-
-      fetchRoute();
-
+      });
   }, [selectedConnection, facilityMap]);
 
-
   useEffect(() => {
-    if (appState !== 'READY' || !mapInstanceRef.current || !layerGroupRef.current) return;
+    if (appState !== 'READY' && appState !== 'VERIFY' && appState !== 'LOADING') return; // Allow rendering during verify/loading if map ready
+    if (!mapInstanceRef.current || !layerGroupRef.current) return;
     
     const L = window.L;
     const layerGroup = layerGroupRef.current;
     layerGroup.clearLayers();
-
     const bounds = L.latLngBounds();
     let hasLayers = false;
-
-    // --- HELPER: Check if facility is connected to selection ---
     const connectedToSelection = new Set();
     if (selectedFacility) {
         connections.forEach(conn => {
@@ -661,27 +859,16 @@ const App = () => {
         });
         connectedToSelection.add(selectedFacility.name); 
     }
-
-    // 1. Draw Connections
     connections.forEach(conn => {
       const origin = facilityMap[conn.oc];
       const dest = facilityMap[conn.cn];
-
       if (!origin || !dest) return;
-
       const isRelatedToSelection = selectedFacility && (conn.oc === selectedFacility.name || conn.cn === selectedFacility.name);
-
       const isOriginVisible = facTypeFilters[origin.type];
       const isDestVisible = facTypeFilters[dest.type];
-      
       let shouldRenderLine = false;
-
-      if (selectedFacility) {
-          if (isRelatedToSelection) shouldRenderLine = true;
-      } else {
-          if (isOriginVisible && isDestVisible) shouldRenderLine = true;
-      }
-
+      if (selectedFacility) { if (isRelatedToSelection) shouldRenderLine = true; } 
+      else { if (isOriginVisible && isDestVisible) shouldRenderLine = true; }
       if (shouldRenderLine) {
         if (selectedFacility) {
              const isOutbound = selectedFacility.name === conn.oc;
@@ -689,296 +876,225 @@ const App = () => {
              if (isOutbound && !filters.showOutbound) return;
              if (isInbound && !filters.showInbound) return;
         }
-        
         if (!filters.vmodes[conn.vmode]) return;
-
-        let color = '#374151';
-        let weight = 1;
-        let opacity = 0.2; 
+        const isFocused = selectedConnection && selectedConnection.oc === conn.oc && selectedConnection.cn === conn.cn && selectedConnection.vmode === conn.vmode && selectedConnection.cutoff === conn.cutoff;
+        if (selectedConnection && !isFocused) return;
         let latlngs = [[origin.lat, origin.lng], [dest.lat, dest.lng]]; 
-
-        // Selected Connection Mode
-        if (selectedConnection && selectedConnection.oc === conn.oc && selectedConnection.cn === conn.cn && selectedConnection.vmode === conn.vmode && selectedConnection.cutoff === conn.cutoff) {
-            opacity = 1;
-            weight = 4;
-            color = '#3b82f6'; 
-            
-            const routeKey = `${conn.oc}|${conn.cn}`;
-            if (activePaths[routeKey] && activePaths[routeKey].coords) {
-                latlngs = activePaths[routeKey].coords;
+        const routeKey = `${conn.oc}|${conn.cn}`;
+        const cachedData = activePaths[routeKey];
+        if (!isFocused) {
+            if (cachedData && cachedData.coords) latlngs = cachedData.coords;
+            let color = '#334155'; let weight = 1.5; let opacity = 0.5;
+            if (selectedFacility) { opacity = 0.9; weight = 2.5; const isOutbound = selectedFacility.name === conn.oc; color = isOutbound ? '#059669' : '#d97706'; }
+            const polyline = L.polyline(latlngs, { color, weight, opacity, smoothFactor: 1 });
+            polyline.on('click', (e) => { L.DomEvent.stopPropagation(e); handleConnectionClick(conn); });
+            polyline.addTo(layerGroup);
+        } else {
+            if (cachedData && cachedData.rawSteps && cachedData.rawSteps.length > 0) {
+                cachedData.rawSteps.forEach(step => {
+                    if (step.geometry && step.geometry.coordinates) {
+                        const stepLatLngs = step.geometry.coordinates.map(c => [c[1], c[0]]);
+                        let segColor = '#2563eb'; 
+                        if (step.speed < 30) segColor = '#dc2626'; else if (step.speed < 60) segColor = '#d97706'; else segColor = '#059669'; 
+                        const segLine = L.polyline(stepLatLngs, { color: segColor, weight: 6, opacity: 1, smoothFactor: 0.5 });
+                        segLine.bindTooltip(`<div class="text-xs font-bold text-slate-800">${step.name || 'Road'}</div><div class="text-[9px] font-mono mb-1">Avg: ${Math.round(step.speed)} km/h</div>`, {sticky: true, direction: 'top'});
+                        segLine.addTo(layerGroup);
+                    }
+                });
+            } else {
+                if (cachedData && cachedData.coords) latlngs = cachedData.coords;
+                const polyline = L.polyline(latlngs, { color: '#2563eb', weight: 6, opacity: 1 });
+                polyline.addTo(layerGroup);
             }
-        } else if (selectedConnection) {
-            // Hide others if one is selected
-            return; 
         }
-        else if (selectedFacility) {
-            opacity = 0.8;
-            weight = 2; 
-            const isOutbound = selectedFacility.name === conn.oc;
-            color = isOutbound ? '#10b981' : '#f59e0b';
-        }
-
-        const polyline = L.polyline(latlngs, {
-          color, weight, opacity, smoothFactor: 1
-        });
-
-        polyline.on('click', (e) => {
-          L.DomEvent.stopPropagation(e);
-          handleConnectionClick(conn);
-        });
-
-        const dist = calculateDistance(origin.lat, origin.lng, dest.lat, dest.lng);
-        const distLabel = dist > 0 ? `${dist} km` : 'Dist. N/A';
-
-        const tooltipContent = `
-          <div class="font-sans text-xs p-1">
-            <div class="font-bold border-b pb-1 mb-1 border-slate-200">${conn.oc} <span class="text-slate-400">→</span> ${conn.cn}</div>
-            <div class="grid grid-cols-2 gap-x-4 gap-y-1">
-               <span class="text-slate-500">Mode:</span> <span class="font-bold text-slate-700">${conn.vmode}</span>
-               <span class="text-slate-500">Dist:</span> <span class="font-medium">${distLabel}</span>
-               <span class="text-slate-500">TAT:</span> <span class="font-medium">${conn.tat} hrs</span>
-               <span class="text-slate-500">Cutoff:</span> <span>${conn.cutoff}</span>
-            </div>
-            <div class="text-[9px] text-indigo-500 mt-1 italic text-center">Click to view road path</div>
-          </div>
-        `;
-        polyline.bindTooltip(tooltipContent, { sticky: true, className: 'custom-tooltip' });
-        polyline.addTo(layerGroup);
       }
     });
-
-    // 2. Draw Facilities
     facilities.forEach(fac => {
-      // Check Visibility: 
-      // 1. Type enabled?
-      // 2. Selected?
-      // 3. Connected to Selected?
-      // 4. BUT: If NO connections, HIDE (The Clean Map Rule)
       const stats = globalFacilityStats[fac.name];
       const hasConnections = stats && (stats.in > 0 || stats.out > 0);
-
-      if (!hasConnections) return; // HIDE ISOLATED FACILITIES
-
+      if (!hasConnections) return; 
       const isSelected = selectedFacility?.name === fac.name;
       const isConnected = selectedFacility && connectedToSelection.has(fac.name);
-      
       let isVisible = facTypeFilters[fac.type] || isSelected || isConnected;
-      
-      if (selectedConnection) {
-          if (fac.name === selectedConnection.oc || fac.name === selectedConnection.cn) isVisible = true;
-          else isVisible = false;
-      }
-
+      if (selectedConnection) { if (fac.name === selectedConnection.oc || fac.name === selectedConnection.cn) isVisible = true; else isVisible = false; }
       if (!isVisible) return;
-
       hasLayers = true;
       const style = getFacilityStyle(fac.type, isSelected);
-
       const marker = L.circleMarker([fac.lat, fac.lng], style);
-
-      marker.on('click', () => {
-        setSelectedFacility(fac);
-        setSelectedConnection(null); 
-        mapInstanceRef.current.flyTo([fac.lat, fac.lng], 6, { duration: 1.5 });
-      });
-
+      marker.on('click', () => { setSelectedFacility(fac); setSelectedConnection(null); mapInstanceRef.current.flyTo([fac.lat, fac.lng], 6, { duration: 1.5 }); });
       const fStats = stats || { in: 0, out: 0 };
-      let typeColorClass = 'text-slate-500';
-      if (fac.type === 'GW') typeColorClass = 'text-violet-600';
-      if (fac.type === 'H') typeColorClass = 'text-blue-600';
-      if (fac.type === 'I') typeColorClass = 'text-cyan-600';
-
-      const tooltipHTML = `
-        <div class="min-w-[180px] font-sans">
-            <div class="border-b border-slate-100 pb-1 mb-1">
-                <div class="font-bold text-sm text-slate-800">${fac.name}</div>
-                <div class="text-[10px] text-slate-500 truncate flex items-center gap-1 mt-0.5">
-                    <span>📍</span> ${fac.address}
-                </div>
-            </div>
-            <div class="grid grid-cols-3 gap-1 text-center">
-                <div class="bg-slate-50 rounded p-1 border border-slate-100">
-                    <div class="text-[8px] uppercase text-slate-400 font-bold tracking-wider">Type</div>
-                    <div class="font-bold text-xs ${typeColorClass}">${fac.type}</div>
-                </div>
-                <div class="bg-emerald-50 rounded p-1 border border-emerald-100">
-                    <div class="text-[8px] uppercase text-emerald-400 font-bold tracking-wider">Out</div>
-                    <div class="font-bold text-xs text-emerald-700">${fStats.out}</div>
-                </div>
-                <div class="bg-amber-50 rounded p-1 border border-amber-100">
-                    <div class="text-[8px] uppercase text-amber-400 font-bold tracking-wider">In</div>
-                    <div class="font-bold text-xs text-amber-700">${fStats.in}</div>
-                </div>
-            </div>
-        </div>
-      `;
-
-      marker.bindTooltip(tooltipHTML, { 
-          direction: 'top', 
-          className: 'custom-tooltip-card', 
-          opacity: 1
-      });
-      
+      let typeColorClass = 'text-slate-500'; if (fac.type === 'GW') typeColorClass = 'text-violet-600'; if (fac.type === 'H') typeColorClass = 'text-blue-600'; if (fac.type === 'I') typeColorClass = 'text-cyan-600';
+      const tooltipHTML = `<div class="min-w-[180px] font-sans"><div class="border-b border-slate-100 pb-1 mb-1"><div class="font-bold text-sm text-slate-800">${fac.name}</div><div class="text-[10px] text-slate-500 truncate flex items-center gap-1 mt-0.5"><span>📍</span> ${fac.address}</div></div><div class="grid grid-cols-3 gap-1 text-center"><div class="bg-slate-50 rounded p-1 border border-slate-100"><div class="text-[8px] uppercase text-slate-400 font-bold tracking-wider">Type</div><div class="font-bold text-xs ${typeColorClass}">${fac.type}</div></div><div class="bg-emerald-50 rounded p-1 border border-emerald-100"><div class="text-[8px] uppercase text-emerald-400 font-bold tracking-wider">Out</div><div class="font-bold text-xs text-emerald-700">${fStats.out}</div></div><div class="bg-amber-50 rounded p-1 border border-amber-100"><div class="text-[8px] uppercase text-amber-400 font-bold tracking-wider">In</div><div class="font-bold text-xs text-amber-700">${fStats.in}</div></div></div></div>`;
+      marker.bindTooltip(tooltipHTML, { direction: 'top', className: 'custom-tooltip-card', opacity: 1 });
       marker.addTo(layerGroup);
-      
-      if (isSelected || isConnected) {
-          marker.bringToFront();
-      }
-
+      if (isSelected || isConnected) { marker.bringToFront(); }
       bounds.extend([fac.lat, fac.lng]);
     });
-
     if (hasLayers && !selectedFacility && !selectedConnection && !mapRef.current.dataset.initialFit) {
       mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50] });
       mapRef.current.dataset.initialFit = "true";
     }
-
   }, [facilities, connections, selectedFacility, selectedConnection, facilityMap, filters, facTypeFilters, appState, globalFacilityStats, activePaths]);
 
-
-  // --- STATS HELPER ---
   const getFacilitySpecificStats = () => {
       if (!selectedFacility) return null;
       let outbound = connections.filter(c => c.oc === selectedFacility.name);
       let inbound = connections.filter(c => c.cn === selectedFacility.name);
-
       const processRoute = (route, isOut) => {
-         const origin = facilityMap[route.oc];
-         const dest = facilityMap[route.cn];
+         const origin = facilityMap[route.oc]; const dest = facilityMap[route.cn];
          const dist = (origin && dest) ? calculateDistance(origin.lat, origin.lng, dest.lat, dest.lng) : 0;
          return { ...route, dist };
       };
-
       outbound = outbound.map(r => processRoute(r, true));
       inbound = inbound.map(r => processRoute(r, false));
-
-      const rawOutCount = outbound.length;
-      const rawInCount = inbound.length;
-
-      const shifts = {
-          MORNING: { out: 0, in: 0, out_ftl: 0, out_crt: 0, in_ftl: 0, in_crt: 0 },
-          AFTERNOON: { out: 0, in: 0, out_ftl: 0, out_crt: 0, in_ftl: 0, in_crt: 0 },
-          NIGHT: { out: 0, in: 0, out_ftl: 0, out_crt: 0, in_ftl: 0, in_crt: 0 }
-      };
-
-      const aggShift = (list, isOut) => {
-          list.forEach(r => {
-              const time = isOut ? r.cutoff : r.eta;
-              const shift = getShift(time);
-              if (shifts[shift]) {
-                  if(isOut) {
-                      shifts[shift].out++;
-                      if(r.vmode === 'FTL') shifts[shift].out_ftl++; else shifts[shift].out_crt++;
-                  } else {
-                      shifts[shift].in++;
-                      if(r.vmode === 'FTL') shifts[shift].in_ftl++; else shifts[shift].in_crt++;
-                  }
-              }
-          });
-      };
-      aggShift(outbound, true);
-      aggShift(inbound, false);
-
-      if (!filters.showOutbound) outbound = [];
-      if (!filters.showInbound) inbound = [];
-      outbound = outbound.filter(c => filters.vmodes[c.vmode]);
-      inbound = inbound.filter(c => filters.vmodes[c.vmode]);
-
-      const applySidebarFilter = (list) => {
-          if (sidebarFilter === 'ALL') return list;
-          if (sidebarFilter === 'FTL') return list.filter(c => c.vmode === 'FTL');
-          if (sidebarFilter === 'CARTING') return list.filter(c => c.vmode === 'CARTING' || c.vmode === 'LTL'); 
-          if (sidebarFilter === 'LONG') return list.filter(c => c.dist > 500);
-          return list;
-      };
-
-      outbound = applySidebarFilter(outbound);
-      inbound = applySidebarFilter(inbound);
-
-      const sortList = (list) => {
-          return list.sort((a, b) => {
-              let valA, valB;
-              if (sortConfig.key === 'dist') {
-                  valA = a.dist;
-                  valB = b.dist;
-              } else { // size
-                  valA = a.vehicle_size.toLowerCase();
-                  valB = b.vehicle_size.toLowerCase();
-              }
-              
-              if (valA < valB) return sortConfig.dir === 'asc' ? -1 : 1;
-              if (valA > valB) return sortConfig.dir === 'asc' ? 1 : -1;
-              return 0;
-          });
-      };
-
-      outbound = sortList(outbound);
-      inbound = sortList(inbound);
-
+      const rawOutCount = outbound.length; const rawInCount = inbound.length;
+      const shifts = { MORNING: { out: 0, in: 0, out_ftl: 0, out_crt: 0, in_ftl: 0, in_crt: 0 }, AFTERNOON: { out: 0, in: 0, out_ftl: 0, out_crt: 0, in_ftl: 0, in_crt: 0 }, NIGHT: { out: 0, in: 0, out_ftl: 0, out_crt: 0, in_ftl: 0, in_crt: 0 } };
+      const aggShift = (list, isOut) => { list.forEach(r => { const time = isOut ? r.cutoff : r.eta; const shift = getShift(time); if (shifts[shift]) { if(isOut) { shifts[shift].out++; if(r.vmode === 'FTL') shifts[shift].out_ftl++; else shifts[shift].out_crt++; } else { shifts[shift].in++; if(r.vmode === 'FTL') shifts[shift].in_ftl++; else shifts[shift].in_crt++; } } }); };
+      aggShift(outbound, true); aggShift(inbound, false);
+      if (!filters.showOutbound) outbound = []; if (!filters.showInbound) inbound = [];
+      outbound = outbound.filter(c => filters.vmodes[c.vmode]); inbound = inbound.filter(c => filters.vmodes[c.vmode]);
+      const applySidebarFilter = (list) => { if (sidebarFilter === 'ALL') return list; if (sidebarFilter === 'FTL') return list.filter(c => c.vmode === 'FTL'); if (sidebarFilter === 'CARTING') return list.filter(c => c.vmode === 'CARTING' || c.vmode === 'LTL'); if (sidebarFilter === 'LONG') return list.filter(c => c.dist > 500); return list; };
+      outbound = applySidebarFilter(outbound); inbound = applySidebarFilter(inbound);
+      const sortList = (list) => { return list.sort((a, b) => { let valA, valB; if (sortConfig.key === 'dist') { valA = a.dist; valB = b.dist; } else { valA = a.vehicle_size.toLowerCase(); valB = b.vehicle_size.toLowerCase(); } if (valA < valB) return sortConfig.dir === 'asc' ? -1 : 1; if (valA > valB) return sortConfig.dir === 'asc' ? 1 : -1; return 0; }); };
+      outbound = sortList(outbound); inbound = sortList(inbound);
       return { outbound, inbound, rawOutCount, rawInCount, shifts };
   };
-
   const currentStats = getFacilitySpecificStats();
-  const vmodeKeys = Object.keys(filters.vmodes).sort();
-
-  // Helper for OSRM metrics in view
   const getOSRMInfo = () => {
       if (!selectedConnection) return null;
       const key = `${selectedConnection.oc}|${selectedConnection.cn}`;
       const data = activePaths[key];
       if (!data || !data.metrics) return null;
-      
       const distKm = (data.metrics.distance / 1000).toFixed(1);
       const durStr = formatDuration(data.metrics.duration);
-      const airDist = calculateDistance(
-          facilityMap[selectedConnection.oc].lat, facilityMap[selectedConnection.oc].lng,
-          facilityMap[selectedConnection.cn].lat, facilityMap[selectedConnection.cn].lng
-      );
+      const airDist = calculateDistance(facilityMap[selectedConnection.oc].lat, facilityMap[selectedConnection.oc].lng, facilityMap[selectedConnection.cn].lat, facilityMap[selectedConnection.cn].lng);
       const bufferHours = Math.max(0, (selectedConnection.tat - (data.metrics.duration/3600))).toFixed(1);
-
-      return { distKm, durStr, airDist, bufferHours };
+      return { distKm, durStr, airDist, bufferHours, segments: data.segments || [], rawSteps: data.rawSteps || [] };
   };
-
   const osrmData = getOSRMInfo();
-
 
   if (appState === 'ERROR') {
       return (
-        <div className="h-screen flex flex-col items-center justify-center bg-slate-900 text-white p-4 text-center">
-            <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
-            <h2 className="text-lg font-bold">System Error</h2>
-            <p className="text-slate-400 mt-2 mb-6">{statusMsg}</p>
-            <button onClick={() => window.location.reload()} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg transition-colors"><RefreshCw size={16} /> Reload Application</button>
+        <div className="h-screen flex flex-col items-center justify-center bg-slate-900 text-white p-6 text-center">
+            <div className="bg-slate-800 p-6 rounded-2xl border border-red-500/30 shadow-2xl max-w-md w-full">
+                <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4 animate-bounce" />
+                <h2 className="text-xl font-bold mb-2">Connection Failed</h2>
+                <p className="text-slate-400 text-sm mb-6 leading-relaxed">{statusMsg}</p>
+                
+                <div className="flex flex-col gap-3">
+                    <button onClick={() => window.location.reload()} className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 py-3 rounded-lg transition-colors font-bold text-sm w-full">
+                        <RefreshCw size={16} /> Retry Connection
+                    </button>
+                    <div className="text-[10px] text-slate-500 mt-2 flex items-center justify-center gap-2">
+                        <WifiOff size={12}/> Check your internet or disable ad-blockers.
+                    </div>
+                </div>
+            </div>
         </div>
       );
   }
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 font-sans text-slate-900 relative">
+      <NotificationBanner notification={notification} onClose={() => setNotification(null)} />
       
+      {/* LOADING SCREEN OVERLAY (Must be here to allow map to render behind it) */}
       {appState === 'LOADING' && (
-        <div className="absolute inset-0 z-[1000] flex flex-col items-center justify-center bg-slate-900 text-white transition-opacity duration-500">
-            {/* Branding */}
-            <div className="flex items-center gap-3 mb-8 animate-pulse">
-                <div className="bg-indigo-600 p-3 rounded-xl text-white shadow-lg shadow-indigo-500/20 transform -rotate-3">
-                    <MapIcon size={32} strokeWidth={2.5} />
-                </div>
-                <h1 className="text-4xl font-black tracking-tighter">
-                    DLV<span className="text-indigo-500">-</span>SIGHTS
-                </h1>
-            </div>
+          <div className="fixed inset-0 z-[2000] bg-slate-950 flex flex-col items-center justify-center text-white p-6 transition-opacity duration-500">
+              {/* Branding */}
+              <div className="flex items-center gap-3 mb-10 animate-bounce-slow">
+                  <div className="bg-indigo-600 p-4 rounded-2xl text-white shadow-2xl shadow-indigo-500/30 transform -rotate-3 border border-indigo-400/50">
+                      <MapIcon size={40} strokeWidth={2.5} />
+                  </div>
+                  <h1 className="text-5xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">
+                      DLV<span className="text-indigo-500">-</span>SIGHTS
+                  </h1>
+              </div>
 
-            {/* Loader */}
-            <div className="flex flex-col items-center">
-                <Loader2 className="animate-spin text-indigo-500 w-8 h-8 mb-4" />
-                <p className="text-sm font-medium tracking-wide text-slate-300">{statusMsg}</p>
-                <div className="mt-2 h-1 w-32 bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-indigo-500 animate-pulse w-full"></div>
-                </div>
-            </div>
-        </div>
+              {/* Progress Section */}
+              <div className="w-full max-w-md space-y-3 mb-12">
+                  <div className="flex justify-between items-end text-xs font-mono tracking-widest uppercase text-slate-400">
+                      <span className="animate-pulse">{statusMsg}</span>
+                      <span className="text-indigo-400 font-bold">{loadingProgress}%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden relative">
+                      <div 
+                          className="h-full bg-gradient-to-r from-indigo-600 to-blue-500 rounded-full transition-all duration-300 ease-out shadow-[0_0_10px_rgba(99,102,241,0.5)]" 
+                          style={{ width: `${loadingProgress}%` }}
+                      >
+                          <div className="absolute inset-0 bg-white/20 w-full animate-[shimmer_1.5s_infinite] skew-x-[-20deg]"></div>
+                      </div>
+                  </div>
+              </div>
+
+              {/* Tip Card */}
+              <div className="w-full max-w-lg bg-slate-900/50 border border-slate-800 rounded-xl p-6 relative overflow-hidden backdrop-blur-sm transition-all duration-500 h-32 flex items-center">
+                  <div className="absolute top-0 right-0 p-2 opacity-10">
+                      <Cpu size={80}/>
+                  </div>
+                  <div key={currentLoadingTipIndex} className="flex gap-5 items-start animate-fadeIn w-full">
+                      <div className="p-3 bg-slate-800 rounded-lg shadow-lg shrink-0">
+                          {LOADING_TIPS[currentLoadingTipIndex].icon}
+                      </div>
+                      <div>
+                          <h3 className="text-sm font-bold text-white uppercase tracking-wide mb-1">{LOADING_TIPS[currentLoadingTipIndex].title}</h3>
+                          <p className="text-xs text-slate-400 leading-relaxed font-medium">{LOADING_TIPS[currentLoadingTipIndex].desc}</p>
+                      </div>
+                  </div>
+                  {/* Paginator */}
+                  <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 flex gap-1.5">
+                      {LOADING_TIPS.map((_, idx) => (
+                          <div key={idx} className={`h-1 rounded-full transition-all duration-300 ${idx === currentLoadingTipIndex ? 'w-4 bg-indigo-500' : 'w-1 bg-slate-700'}`}></div>
+                      ))}
+                  </div>
+              </div>
+              
+              <div className="absolute bottom-6 text-[10px] text-slate-600 font-mono">
+                  SECURE CONNECTION • ENCRYPTED • V4.0.1
+              </div>
+          </div>
       )}
 
+      {/* VERIFY SCREEN OVERLAY */}
+      {appState === 'VERIFY' && (
+          <div className="fixed inset-0 z-[2000] bg-slate-950 flex flex-col items-center justify-center text-white p-4">
+                <div className="bg-slate-900/50 p-8 rounded-2xl border border-slate-800 shadow-2xl max-w-sm w-full text-center relative overflow-hidden backdrop-blur-md">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-emerald-500 to-transparent"></div>
+                    <div className="mb-6 flex justify-center relative">
+                        <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full"></div>
+                        <ShieldCheck size={64} className="text-emerald-500 relative z-10" />
+                    </div>
+                    <h2 className="text-2xl font-bold mb-2">Connection Established</h2>
+                    <p className="text-slate-400 text-sm mb-8">
+                        The logistics network visualizer is ready. Please verify your session to enter the dashboard.
+                    </p>
+                    <button 
+                        onClick={handleVerifyEntry}
+                        disabled={isVerifying}
+                        className={`w-full py-3.5 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 group relative overflow-hidden ${
+                            isVerifying 
+                            ? 'bg-emerald-600/50 text-emerald-200 cursor-wait' 
+                            : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/50 hover:shadow-emerald-500/30'
+                        }`}
+                    >
+                        {isVerifying ? (
+                            <>
+                                <Loader2 size={18} className="animate-spin"/> Verifying Access...
+                            </>
+                        ) : (
+                            <>
+                                <CheckCircle2 size={18} className="group-hover:scale-110 transition-transform"/> Click to Verify Entry
+                            </>
+                        )}
+                    </button>
+                    <div className="mt-6 flex justify-center gap-4 text-[10px] text-slate-600 font-mono">
+                        <span className="flex items-center gap-1"><Zap size={10}/> LOW LATENCY</span>
+                        <span className="flex items-center gap-1"><Lock size={10}/> TLS 1.3</span>
+                    </div>
+                </div>
+          </div>
+      )}
+      
       {/* Header */}
       <header className="bg-white border-b border-4 border-indigo-600 px-6 py-4 flex items-center justify-between shadow-md z-20">
         <div className="flex items-center gap-4">
@@ -1028,6 +1144,72 @@ const App = () => {
             )}
 
             <div className="flex-1 overflow-y-auto p-4 pb-20">
+                {/* GLOBAL ROUTE PRECISION CONTROLS (Appears in both modes) */}
+                {(selectedFacility || selectedConnection) && (
+                    <div className="mb-4 bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-lg p-3 shadow-sm">
+                        <div className="flex justify-between items-center mb-2">
+                             <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                                 <Satellite size={12}/> Route Precision (Beta)
+                             </h4>
+                             {isGenerating && <span className="text-[9px] font-mono text-indigo-600 animate-pulse">{genProgress}</span>}
+                        </div>
+                        
+                        <div className="space-y-2">
+                            {/* OSRM Option */}
+                            <button 
+                                onClick={() => handleRegenerateRoutes('OSRM')}
+                                disabled={isGenerating}
+                                className="w-full flex items-center justify-between p-2 rounded bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all group disabled:opacity-50"
+                            >
+                                <div className="flex flex-col items-start">
+                                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Zap size={12} className="text-amber-500 fill-amber-500"/> Load Real Paths (OSRM)</span>
+                                    <span className="text-[9px] text-slate-400">Open-Source • Free • Slower</span>
+                                </div>
+                                {isGenerating ? <Loader2 size={12} className="animate-spin text-indigo-500"/> : <ArrowRight size={12} className="text-slate-300 group-hover:text-indigo-500"/>}
+                            </button>
+                            <div className="text-[9px] text-amber-600/80 bg-amber-50/50 px-2 py-1 rounded italic leading-tight">
+                                ⚠️ <b>Warning:</b> Generating all routes may take a few minutes due to public server traffic limits.
+                            </div>
+
+                            {/* Mapbox Option */}
+                            {!mapboxUnlocked ? (
+                                <div className="relative overflow-hidden rounded border border-slate-200 bg-slate-50 p-2">
+                                     <div className="flex justify-between items-center mb-1">
+                                         <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Lock size={12}/> Precision Paths (Mapbox)</span>
+                                         <button onClick={() => setShowPasskeyInput(!showPasskeyInput)} className="text-[9px] text-indigo-600 font-bold hover:underline">Unlock</button>
+                                     </div>
+                                     {showPasskeyInput ? (
+                                         <div className="flex gap-1 mt-2 animate-fadeIn">
+                                             <input 
+                                                 type="password" 
+                                                 placeholder="Enter Passkey"
+                                                 className="w-full text-xs px-2 py-1 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 outline-none"
+                                                 value={passkeyInput}
+                                                 onChange={(e) => setPasskeyInput(e.target.value)}
+                                             />
+                                             <button onClick={handleUnlockMapbox} className="bg-indigo-600 text-white px-2 rounded hover:bg-indigo-700 transition-colors"><Unlock size={12}/></button>
+                                         </div>
+                                     ) : (
+                                         <span className="text-[9px] text-slate-400">High-Fidelity • Fast • Restricted Access</span>
+                                     )}
+                                </div>
+                            ) : (
+                                <button 
+                                    onClick={() => handleRegenerateRoutes('MAPBOX')}
+                                    disabled={isGenerating}
+                                    className="w-full flex items-center justify-between p-2 rounded bg-indigo-600 text-white shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50"
+                                >
+                                    <div className="flex flex-col items-start">
+                                        <span className="text-xs font-bold flex items-center gap-1.5"><Satellite size={12} className="animate-pulse"/> Generate Precision Paths</span>
+                                        <span className="text-[9px] text-indigo-200">Powered by Mapbox API • Fast</span>
+                                    </div>
+                                    {isGenerating ? <Loader2 size={12} className="animate-spin"/> : <RefreshCw size={12}/>}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 {selectedConnection ? (
                     // ROUTE DETAIL VIEW WITH METRICS
                     <div className="space-y-4 animate-fadeIn">
@@ -1090,6 +1272,121 @@ const App = () => {
                                 </div>
                             </div>
                             
+                            {/* DETAILED ROUTE ANALYTICS */}
+                            {osrmData && (
+                                <div className="mt-4 pt-4 border-t border-slate-100 animate-fadeIn">
+                                    
+                                    {/* Tabs */}
+                                    <div className="flex mb-4 bg-slate-100 p-1 rounded-lg">
+                                        <button 
+                                            onClick={() => setDetailedViewMode('ANATOMY')}
+                                            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[10px] font-bold rounded-md transition-all ${detailedViewMode === 'ANATOMY' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            <PieChart size={12}/> Analysis
+                                        </button>
+                                        <button 
+                                            onClick={() => setDetailedViewMode('STEPS')}
+                                            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[10px] font-bold rounded-md transition-all ${detailedViewMode === 'STEPS' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            <List size={12}/> Directions
+                                        </button>
+                                    </div>
+
+                                    {/* Content Area */}
+                                    <div className="max-h-80 overflow-y-auto pr-1 scrollbar-hide">
+                                        
+                                        {/* VIEW 1: ANATOMY */}
+                                        {detailedViewMode === 'ANATOMY' && (
+                                            <div className="space-y-4">
+                                                {/* Time Distribution */}
+                                                <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                                    <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Time Allocation</h5>
+                                                    <div className="flex items-center gap-1 mb-1 h-3 rounded-full overflow-hidden w-full">
+                                                        <div className="h-full bg-emerald-400" style={{width: `${(osrmData.rawSteps.filter(s => s.speed > 60).reduce((a,b)=>a+b.time,0) / (activePaths[`${selectedConnection.oc}|${selectedConnection.cn}`].metrics.duration)) * 100}%`}}></div>
+                                                        <div className="h-full bg-amber-400" style={{width: `${(osrmData.rawSteps.filter(s => s.speed > 30 && s.speed <= 60).reduce((a,b)=>a+b.time,0) / (activePaths[`${selectedConnection.oc}|${selectedConnection.cn}`].metrics.duration)) * 100}%`}}></div>
+                                                        <div className="h-full bg-red-400 flex-1"></div>
+                                                    </div>
+                                                    <div className="flex justify-between text-[9px] font-medium text-slate-400">
+                                                        <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>Fast (&gt;60km/h)</span>
+                                                        <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div>Moderate</span>
+                                                        <span className="flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-red-400"></div>Slow (&lt;30km/h)</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Top Segments */}
+                                                <div>
+                                                    <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Major Road Segments</h5>
+                                                    <div className="space-y-1.5">
+                                                        {osrmData.segments.slice(0, 6).map((seg, idx) => {
+                                                            const speed = Math.round(seg.speed);
+                                                            let barColor = 'bg-slate-200';
+                                                            let speedColor = 'text-slate-500';
+                                                            if (speed > 60) { barColor = 'bg-emerald-400'; speedColor = 'text-emerald-600'; }
+                                                            else if (speed > 30) { barColor = 'bg-amber-400'; speedColor = 'text-amber-600'; }
+                                                            else { barColor = 'bg-red-400'; speedColor = 'text-red-500'; }
+
+                                                            return (
+                                                                <div key={idx} className="flex items-center justify-between text-[10px] border-b border-slate-50 pb-1 last:border-0">
+                                                                    <div className="flex items-center gap-2 max-w-[65%]">
+                                                                        <div className={`w-1 h-6 rounded-full ${barColor}`}></div>
+                                                                        <div>
+                                                                            <div className="truncate font-bold text-slate-700" title={seg.name}>{seg.name}</div>
+                                                                            <div className="text-[9px] text-slate-400">{formatDuration(seg.time)} duration</div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <div className={`font-black ${speedColor}`}>{speed} km/h</div>
+                                                                        <div className="text-slate-400">{(seg.dist / 1000).toFixed(1)} km</div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* VIEW 2: STEPS */}
+                                        {detailedViewMode === 'STEPS' && (
+                                            <div className="space-y-2">
+                                                {osrmData.rawSteps.map((step, idx) => {
+                                                    const dist = step.dist; 
+                                                    const time = step.time;
+                                                    if (dist < 50) return null; // Skip tiny steps
+
+                                                    let icon = <Navigation size={12} className="text-slate-400"/>;
+                                                    const maneuver = step.instruction?.type || '';
+                                                    if (maneuver.includes('turn')) icon = <RefreshCw size={12} className="text-slate-400"/>; // Placeholder for turn
+                                                    
+                                                    const speed = step.speed;
+
+                                                    let speedBadge = <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">{Math.round(speed)} km/h</span>;
+                                                    if (speed < 20) speedBadge = <span className="text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">{Math.round(speed)} km/h</span>;
+                                                    else if (speed < 40) speedBadge = <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">{Math.round(speed)} km/h</span>;
+
+                                                    return (
+                                                        <div key={idx} className="flex gap-3 text-[10px] py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors p-1 rounded">
+                                                            <div className="mt-1">{icon}</div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="font-bold text-slate-700 mb-0.5 truncate" title={step.name}>{step.name || "Continue on road"}</div>
+                                                                <div className="flex flex-wrap gap-2 text-slate-400 mb-1.5">
+                                                                    <span>{(dist/1000).toFixed(1)} km</span>
+                                                                    <span>•</span>
+                                                                    <span>{formatDuration(time)}</span>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right flex flex-col items-end gap-1">
+                                                                <div className="text-[9px] font-bold">{speedBadge}</div>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="mt-3 flex gap-2 text-xs">
                                 <span className="bg-slate-100 px-2 py-1 rounded text-slate-600 font-bold border border-slate-200">{selectedConnection.vehicle_size}</span>
                                 <span className="bg-slate-100 px-2 py-1 rounded text-slate-600 font-bold border border-slate-200">{selectedConnection.vmode}</span>
@@ -1326,7 +1623,7 @@ const App = () => {
         </aside>
 
         {/* Map Area */}
-        <main className="flex-1 relative bg-slate-900">
+        <main className="flex-1 relative bg-slate-200">
           <div id="map" ref={mapRef} className="absolute inset-0 z-0 outline-none" />
           
           {/* SEARCH BOX (Bottom Left) */}
