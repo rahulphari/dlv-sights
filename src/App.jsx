@@ -1065,13 +1065,17 @@ const App = () => {
                         <ShieldCheck size={64} className="text-emerald-500 relative z-10" />
                     </div>
                     <h2 className="text-2xl font-bold mb-2">DLV-SIGHTS IS READY!</h2>
-                    <p className="text-slate-400 text-sm leading-relaxed mb-8">
-    <strong>Disclaimer:</strong> DLV-SIGHTS uses <em>RouteDbData</em> from DoctorHub for connection mapping. 
-    Although data is updated regularly, the most recent changes may not always be reflected, as the database 
-    requires manual updates. Please intimate us of any discrepancies observed. 
-    This tool is intended only for assistive overview and interpretation. 
-    <span class="font-medium">Do not rely solely on this data for decision-making.</span>
-</p>
+                 <div className="max-w-2xl text-sm text-slate-300 leading-relaxed mb-8">
+  <p>
+    <strong className="text-white block mb-1">Disclaimer</strong>
+    DLV-SIGHTS uses <em className="not-italic font-medium text-slate-200">RouteDbData</em> from DoctorHub for connection mapping. 
+    While data is updated regularly, this database relies on manual updates and may not reflect real-time changes. 
+    Please <button className="underline hover:text-white decoration-slate-500 underline-offset-4">report any discrepancies</button>.
+  </p>
+  <p className="mt-3 text-amber-200/90 font-medium">
+    ⚠ This tool is for assistive interpretation only. Do not rely solely on this data for decision-making.
+  </p>
+</div>
                     <button 
                         onClick={handleVerifyEntry}
                         disabled={isVerifying}
