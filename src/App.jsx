@@ -1050,7 +1050,7 @@ const App = () => {
               </div>
               
               <div className="absolute bottom-6 text-[10px] text-slate-600 font-mono">
-                  SECURE CONNECTION • ENCRYPTED • V4.0.1
+                  Designed & Crafted by Rh. | for 🦅 Black Falcons
               </div>
           </div>
       )}
@@ -1066,7 +1066,7 @@ const App = () => {
                     </div>
                     <h2 className="text-2xl font-bold mb-2">Connection Established</h2>
                     <p className="text-slate-400 text-sm mb-8">
-                        The logistics network visualizer is ready. Please verify your session to enter the dashboard.
+                        Delhivery network visualizer is ready. Please verify your session to enter the dashboard.
                     </p>
                     <button 
                         onClick={handleVerifyEntry}
