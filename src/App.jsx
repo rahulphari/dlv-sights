@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed, Sparkles, Route as RouteIcon, ArrowLeft, Timer, Activity, TrendingUp, Lightbulb, Lock, Unlock, Zap, Satellite, BarChart3, Gauge, Milestone, List, PieChart, Info, Bell, ShieldCheck, CheckCircle2, Cpu, Globe, WifiOff } from 'lucide-react';
+import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed, Sparkles, Route as RouteIcon, ArrowLeft, Timer, Activity, TrendingUp, Lightbulb, Lock, Unlock, Zap, Satellite, BarChart3, Gauge, Milestone, List, PieChart, Info, Bell, ShieldCheck, CheckCircle2, Cpu, Globe, WifiOff, Settings, CornerUpLeft, CornerUpRight, Move, Ban } from 'lucide-react';
 
 // ==========================================
 // 1. DATA SOURCE CONFIGURATION
@@ -58,8 +58,6 @@ const useExternalResource = (url, type) => {
       script.onload = () => setLoaded(true);
       script.onerror = () => {
           console.error(`Failed to load script: ${url}`);
-          // Do NOT set loaded to false here strictly, simply let it hang or handle elsewhere 
-          // to prevent race conditions with pre-existing scripts
       };
       document.body.appendChild(script);
     } else if (type === 'style') {
@@ -301,7 +299,12 @@ const App = () => {
   const [sortConfig, setSortConfig] = useState({ key: 'dist', dir: 'desc' }); 
 
   const [showFacLegend, setShowFacLegend] = useState(true); // OPEN BY DEFAULT
-  const [showRouteLegend, setShowRouteLegend] = useState(true); // OPEN BY DEFAULT
+  
+  // NEW UI STATES
+  const [showSettings, setShowSettings] = useState(false);
+  const [showFilters, setShowFilters] = useState(true); // For sidebar accordion
+  const [showSlowGenWarning, setShowSlowGenWarning] = useState(false);
+
 
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -315,6 +318,7 @@ const App = () => {
   const [passkeyInput, setPasskeyInput] = useState('');
   const [showPasskeyInput, setShowPasskeyInput] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const isGeneratingRef = useRef(false); // Ref for timeout access
   const [genProgress, setGenProgress] = useState('');
   const [detailedViewMode, setDetailedViewMode] = useState('ANATOMY'); // 'ANATOMY' or 'STEPS'
 
@@ -436,6 +440,7 @@ const App = () => {
       if (passkeyInput === '1732') {
           setMapboxUnlocked(true);
           setShowPasskeyInput(false);
+          setShowSlowGenWarning(false); // Close warning if unlocked via popup
           showToast("🚀 Mapbox Precision Mode Unlocked!", 'success');
       } else {
           showToast("❌ Invalid Access Key. Please try again.", 'error');
@@ -714,7 +719,6 @@ const App = () => {
   };
 
   // --- FILTERS, MAP UPDATES, ROUTING --- 
-  // (Same as before, omitted to save space as Logic didn't change, just UI rendering flow)
   
   useEffect(() => {
       if (connections.length > 0) {
@@ -798,8 +802,21 @@ const App = () => {
           if (filters.showInbound) targets = [...targets, ...connections.filter(c => c.cn === selectedFacility.name && filters.vmodes[c.vmode])];
       }
       if (targets.length === 0) return;
+      
       setIsGenerating(true);
+      isGeneratingRef.current = true;
       setGenProgress(`0/${targets.length}`);
+      
+      // Start Warning Timer for OSRM
+      let warningTimer = null;
+      if (provider === 'OSRM') {
+          warningTimer = setTimeout(() => {
+              if (isGeneratingRef.current) {
+                  setShowSlowGenWarning(true);
+              }
+          }, 10000); // 10 Seconds
+      }
+
       const chunkSize = 5;
       for (let i = 0; i < targets.length; i += chunkSize) {
           const chunk = targets.slice(i, i + chunkSize);
@@ -822,7 +839,10 @@ const App = () => {
           setGenProgress(`${Math.min(i + chunkSize, targets.length)}/${targets.length}`);
           if (provider === 'OSRM') await new Promise(r => setTimeout(r, 200)); 
       }
+      
+      if (warningTimer) clearTimeout(warningTimer);
       setIsGenerating(false);
+      isGeneratingRef.current = false;
       setGenProgress('');
   };
 
@@ -998,6 +1018,46 @@ const App = () => {
     <div className="flex flex-col h-screen bg-slate-50 font-sans text-slate-900 relative">
       <NotificationBanner notification={notification} onClose={() => setNotification(null)} />
       
+      {/* SLOW GENERATION WARNING POPUP */}
+      {showSlowGenWarning && (
+          <div className="fixed inset-0 z-[2500] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+              <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full border border-slate-200">
+                  <div className="flex flex-col items-center text-center">
+                      <div className="bg-amber-100 p-3 rounded-full mb-4 animate-pulse">
+                          <Timer size={32} className="text-amber-600"/>
+                      </div>
+                      <h3 className="text-lg font-bold text-slate-800 mb-2">Generating Routes is Taking Time</h3>
+                      <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+                          The public OSRM server is currently busy. For faster, enterprise-grade speeds, please unlock the Mapbox API integration.
+                      </p>
+                      
+                      <div className="w-full space-y-3">
+                         <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+                             <div className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1.5"><Lock size={12}/> Unlock Precision Mode</div>
+                             <div className="flex gap-2">
+                                 <input 
+                                     type="password" 
+                                     placeholder="Enter Passkey"
+                                     className="flex-1 text-sm px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                                     value={passkeyInput}
+                                     onChange={(e) => setPasskeyInput(e.target.value)}
+                                 />
+                                 <button onClick={handleUnlockMapbox} className="bg-indigo-600 text-white px-3 rounded-lg hover:bg-indigo-700 transition-colors"><ArrowRight size={16}/></button>
+                             </div>
+                         </div>
+                         
+                         <button 
+                             onClick={() => setShowSlowGenWarning(false)} 
+                             className="text-xs font-bold text-slate-400 hover:text-slate-600 w-full py-2"
+                         >
+                             I'll wait for OSRM...
+                         </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {/* LOADING SCREEN OVERLAY (Must be here to allow map to render behind it) */}
       {appState === 'LOADING' && (
           <div className="fixed inset-0 z-[2000] bg-slate-950 flex flex-col items-center justify-center text-white p-6 transition-opacity duration-500">
@@ -1135,86 +1195,162 @@ const App = () => {
             
             {/* Conditional Sidebar Header based on Mode */}
             {selectedConnection ? (
-               <div className="p-4 border-b border-slate-100 bg-blue-50/80 flex items-center gap-2 animate-fadeIn">
+               <div className="p-4 border-b border-slate-100 bg-blue-50/80 flex items-center gap-2 animate-fadeIn relative">
                    <button onClick={() => setSelectedConnection(null)} className="p-1 rounded-full hover:bg-white text-blue-600 transition-colors"><ArrowLeft size={16}/></button>
-                   <div>
+                   <div className="flex-1">
                        <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Route Focus</div>
-                       <div className="text-sm font-bold text-blue-800 leading-tight">{selectedConnection.oc} ➝ {selectedConnection.cn}</div>
+                       <div className="text-sm font-bold text-blue-800 leading-tight truncate">{selectedConnection.oc} ➝ {selectedConnection.cn}</div>
                    </div>
+                   {/* Settings Icon in Route Focus Mode */}
+                    <div className="relative">
+                       <button onClick={() => setShowSettings(!showSettings)} className={`p-2 rounded-full transition-colors ${showSettings ? 'bg-white text-indigo-600 shadow-sm' : 'hover:bg-blue-100 text-blue-500'}`}>
+                           <Settings size={18} className={isGenerating ? "animate-spin-slow" : ""}/>
+                       </button>
+                    </div>
                </div>
             ) : (
-               <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Network Inspector (Beta)</h3>
-                   {selectedFacility && (
-                       <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">FOCUSED</span>
-                   )}
+               <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center relative">
+                   <div>
+                       <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Network Inspector (Beta)</h3>
+                       {selectedFacility && (
+                           <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">FOCUSED</span>
+                       )}
+                   </div>
+                   <div className="relative">
+                       <button onClick={() => setShowSettings(!showSettings)} className={`p-2 rounded-full transition-colors ${showSettings ? 'bg-white text-indigo-600 shadow-sm' : 'hover:bg-slate-200 text-slate-400'}`}>
+                           <Settings size={18} className={isGenerating ? "animate-spin-slow" : ""}/>
+                       </button>
+                   </div>
                </div>
+            )}
+            
+            {/* SETTINGS POPOVER (Positioned absolute relative to the header button area logic needs care, but here putting it relative to Sidebar top) */}
+            {showSettings && (
+                <div className="absolute top-[60px] right-2 z-50 w-72 bg-white rounded-xl shadow-2xl border border-slate-100 p-4 animate-fadeIn origin-top-right">
+                    <div className="flex justify-between items-center mb-3">
+                         <h4 className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider flex items-center gap-1.5">
+                             <Satellite size={12}/> Route Precision (Beta)
+                         </h4>
+                         <button onClick={() => setShowSettings(false)} className="text-slate-300 hover:text-slate-500"><X size={14}/></button>
+                    </div>
+                    
+                    {isGenerating && <div className="text-[9px] font-mono text-indigo-600 animate-pulse mb-2 text-center">Processing: {genProgress}</div>}
+                    
+                    <div className="space-y-2">
+                        {/* OSRM Option */}
+                        <button 
+                            onClick={() => handleRegenerateRoutes('OSRM')}
+                            disabled={isGenerating}
+                            className="w-full flex items-center justify-between p-2.5 rounded-lg bg-slate-50 border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all group disabled:opacity-50 text-left"
+                        >
+                            <div className="flex flex-col items-start">
+                                <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Zap size={12} className="text-amber-500 fill-amber-500"/> Load Real Paths (OSRM)</span>
+                                <span className="text-[9px] text-slate-400 mt-0.5">Open-Source • Free • ~5-10s</span>
+                            </div>
+                            {isGenerating ? <Loader2 size={14} className="animate-spin text-indigo-500"/> : <ArrowRight size={14} className="text-slate-300 group-hover:text-indigo-500"/>}
+                        </button>
+
+                        {/* Mapbox Option */}
+                        {!mapboxUnlocked ? (
+                            <div className="relative overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-2.5">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Lock size={12}/> Precision Paths (Mapbox)</span>
+                                        <button onClick={() => setShowPasskeyInput(!showPasskeyInput)} className="text-[9px] text-indigo-600 font-bold hover:underline">Unlock</button>
+                                    </div>
+                                    {showPasskeyInput ? (
+                                        <div className="flex gap-1 mt-1 animate-fadeIn">
+                                            <input 
+                                                type="password" 
+                                                placeholder="Enter Passkey"
+                                                className="w-full text-xs px-2 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 outline-none"
+                                                value={passkeyInput}
+                                                onChange={(e) => setPasskeyInput(e.target.value)}
+                                            />
+                                            <button onClick={handleUnlockMapbox} className="bg-indigo-600 text-white px-2 rounded hover:bg-indigo-700 transition-colors"><Unlock size={12}/></button>
+                                        </div>
+                                    ) : (
+                                        <span className="text-[9px] text-slate-400 block">Enterprise Grade • High-Fidelity • Fast</span>
+                                    )}
+                            </div>
+                        ) : (
+                            <button 
+                                onClick={() => handleRegenerateRoutes('MAPBOX')}
+                                disabled={isGenerating}
+                                className="w-full flex items-center justify-between p-2.5 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-200 hover:shadow-indigo-300 transition-all disabled:opacity-50 text-left"
+                            >
+                                <div className="flex flex-col items-start">
+                                    <span className="text-xs font-bold flex items-center gap-1.5"><Satellite size={12} className="animate-pulse"/> Generate Precision Paths</span>
+                                    <span className="text-[9px] text-indigo-100 mt-0.5">Powered by Mapbox API • Instant</span>
+                                </div>
+                                {isGenerating ? <Loader2 size={14} className="animate-spin"/> : <RefreshCw size={14}/>}
+                            </button>
+                        )}
+                    </div>
+                </div>
             )}
 
             <div className="flex-1 overflow-y-auto p-4 pb-20">
-                {/* GLOBAL ROUTE PRECISION CONTROLS (Appears in both modes) */}
-                {(selectedFacility || selectedConnection) && (
-                    <div className="mb-4 bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 rounded-lg p-3 shadow-sm">
-                        <div className="flex justify-between items-center mb-2">
-                             <h4 className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
-                                 <Satellite size={12}/> Route Precision (Beta)
-                             </h4>
-                             {isGenerating && <span className="text-[9px] font-mono text-indigo-600 animate-pulse">{genProgress}</span>}
-                        </div>
+                {/* 1. GLOBAL NETWORK FILTERS (New Integration) */}
+                {(!selectedConnection) && (
+                    <div className="mb-4 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm transition-all duration-300">
+                        <button 
+                            onClick={() => setShowFilters(!showFilters)}
+                            className="w-full flex justify-between items-center px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+                        >
+                            <h4 className="text-xs font-bold text-slate-600 flex items-center gap-2">
+                                <SlidersHorizontal size={14} className="text-indigo-500"/> Network Config
+                            </h4>
+                            {showFilters ? <ChevronUp size={14} className="text-slate-400"/> : <ChevronDown size={14} className="text-slate-400"/>}
+                        </button>
                         
-                        <div className="space-y-2">
-                            {/* OSRM Option */}
-                            <button 
-                                onClick={() => handleRegenerateRoutes('OSRM')}
-                                disabled={isGenerating}
-                                className="w-full flex items-center justify-between p-2 rounded bg-white border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all group disabled:opacity-50"
-                            >
-                                <div className="flex flex-col items-start">
-                                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Zap size={12} className="text-amber-500 fill-amber-500"/> Load Real Paths (OSRM)</span>
-                                    <span className="text-[9px] text-slate-400">Open-Source • Free • Slower</span>
-                                </div>
-                                {isGenerating ? <Loader2 size={12} className="animate-spin text-indigo-500"/> : <ArrowRight size={12} className="text-slate-300 group-hover:text-indigo-500"/>}
-                            </button>
-                            <div className="text-[9px] text-amber-600/80 bg-amber-50/50 px-2 py-1 rounded italic leading-tight">
-                                ⚠️ <b>Warning:</b> Generating all routes may take a few minutes due to public server traffic limits.
-                            </div>
-
-                            {/* Mapbox Option */}
-                            {!mapboxUnlocked ? (
-                                <div className="relative overflow-hidden rounded border border-slate-200 bg-slate-50 p-2">
-                                     <div className="flex justify-between items-center mb-1">
-                                         <span className="text-xs font-bold text-slate-500 flex items-center gap-1.5"><Lock size={12}/> Precision Paths (Mapbox)</span>
-                                         <button onClick={() => setShowPasskeyInput(!showPasskeyInput)} className="text-[9px] text-indigo-600 font-bold hover:underline">Unlock</button>
+                        {showFilters && (
+                             <div className="p-4 bg-white space-y-4 animate-fadeIn">
+                                 {/* Direction */}
+                                 <div>
+                                     <h5 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Traffic Direction</h5>
+                                     <div className="flex gap-2">
+                                        <label className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${filters.showOutbound ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100'}`}>
+                                            <input type="checkbox" className="hidden" checked={filters.showOutbound} onChange={(e) => setFilters({...filters, showOutbound: e.target.checked})}/>
+                                            <div className={`w-2 h-2 rounded-full ${filters.showOutbound ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                                            <span className={`text-[10px] font-bold ${filters.showOutbound ? 'text-emerald-700' : 'text-slate-400'}`}>Outbound</span>
+                                        </label>
+                                        <label className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${filters.showInbound ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
+                                            <input type="checkbox" className="hidden" checked={filters.showInbound} onChange={(e) => setFilters({...filters, showInbound: e.target.checked})}/>
+                                            <div className={`w-2 h-2 rounded-full ${filters.showInbound ? 'bg-amber-500' : 'bg-slate-300'}`}></div>
+                                            <span className={`text-[10px] font-bold ${filters.showInbound ? 'text-amber-700' : 'text-slate-400'}`}>Inbound</span>
+                                        </label>
                                      </div>
-                                     {showPasskeyInput ? (
-                                         <div className="flex gap-1 mt-2 animate-fadeIn">
-                                             <input 
-                                                 type="password" 
-                                                 placeholder="Enter Passkey"
-                                                 className="w-full text-xs px-2 py-1 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 outline-none"
-                                                 value={passkeyInput}
-                                                 onChange={(e) => setPasskeyInput(e.target.value)}
-                                             />
-                                             <button onClick={handleUnlockMapbox} className="bg-indigo-600 text-white px-2 rounded hover:bg-indigo-700 transition-colors"><Unlock size={12}/></button>
-                                         </div>
-                                     ) : (
-                                         <span className="text-[9px] text-slate-400">High-Fidelity • Fast • Restricted Access</span>
-                                     )}
-                                </div>
-                            ) : (
-                                <button 
-                                    onClick={() => handleRegenerateRoutes('MAPBOX')}
-                                    disabled={isGenerating}
-                                    className="w-full flex items-center justify-between p-2 rounded bg-indigo-600 text-white shadow-md shadow-indigo-200 hover:bg-indigo-700 transition-all disabled:opacity-50"
-                                >
-                                    <div className="flex flex-col items-start">
-                                        <span className="text-xs font-bold flex items-center gap-1.5"><Satellite size={12} className="animate-pulse"/> Generate Precision Paths</span>
-                                        <span className="text-[9px] text-indigo-200">Powered by Mapbox API • Fast</span>
+                                 </div>
+
+                                 {/* Vehicle Modes */}
+                                 {Object.keys(filters.vmodes).length > 0 && (
+                                    <div>
+                                        <div className="flex justify-between items-end mb-2">
+                                            <h5 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Service Type</h5>
+                                            <button 
+                                                onClick={() => {
+                                                    const allTrue = Object.keys(filters.vmodes).every(k => filters.vmodes[k]);
+                                                    const newModes = {};
+                                                    Object.keys(filters.vmodes).forEach(k => newModes[k] = !allTrue);
+                                                    setFilters(p => ({...p, vmodes: newModes}));
+                                                }}
+                                                className="text-[8px] text-indigo-600 font-bold hover:underline"
+                                            >
+                                                Toggle All
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-1.5">
+                                            {Object.keys(filters.vmodes).sort().map(mode => (
+                                                <label key={mode} className={`flex items-center gap-2 p-1.5 rounded border cursor-pointer transition-colors ${filters.vmodes[mode] ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-100 hover:bg-slate-50'}`}>
+                                                    <input type="checkbox" className="accent-indigo-500" checked={filters.vmodes[mode]} onChange={(e) => setFilters(p => ({...p, vmodes: {...p.vmodes, [mode]: e.target.checked}}))}/>
+                                                    <span className={`text-[10px] font-bold truncate ${filters.vmodes[mode] ? 'text-indigo-700' : 'text-slate-400 line-through'}`}>{mode}</span>
+                                                </label>
+                                            ))}
+                                        </div>
                                     </div>
-                                    {isGenerating ? <Loader2 size={12} className="animate-spin"/> : <RefreshCw size={12}/>}
-                                </button>
-                            )}
-                        </div>
+                                 )}
+                             </div>
+                        )}
                     </div>
                 )}
 
@@ -1354,37 +1490,63 @@ const App = () => {
                                             </div>
                                         )}
 
-                                        {/* VIEW 2: STEPS */}
+                                        {/* VIEW 2: STEPS (ENHANCED) */}
                                         {detailedViewMode === 'STEPS' && (
-                                            <div className="space-y-2">
+                                            <div className="space-y-0">
                                                 {osrmData.rawSteps.map((step, idx) => {
                                                     const dist = step.dist; 
                                                     const time = step.time;
-                                                    if (dist < 50) return null; // Skip tiny steps
+                                                    if (dist < 10 && idx !== osrmData.rawSteps.length -1) return null; // Skip tiny steps except destination
 
-                                                    let icon = <Navigation size={12} className="text-slate-400"/>;
-                                                    const maneuver = step.instruction?.type || '';
-                                                    if (maneuver.includes('turn')) icon = <RefreshCw size={12} className="text-slate-400"/>; // Placeholder for turn
-                                                    
-                                                    const speed = step.speed;
+                                                    // MANEUVER ICON & TEXT LOGIC
+                                                    let icon = <Navigation size={14} className="text-slate-400"/>;
+                                                    let instructionText = step.name || "Continue";
+                                                    const type = step.instruction?.type || 'straight';
+                                                    const modifier = step.instruction?.modifier || '';
 
-                                                    let speedBadge = <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">{Math.round(speed)} km/h</span>;
-                                                    if (speed < 20) speedBadge = <span className="text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">{Math.round(speed)} km/h</span>;
-                                                    else if (speed < 40) speedBadge = <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">{Math.round(speed)} km/h</span>;
+                                                    if (type === 'turn') {
+                                                        if (modifier.includes('left')) icon = <CornerUpLeft size={14} className="text-indigo-500"/>;
+                                                        else if (modifier.includes('right')) icon = <CornerUpRight size={14} className="text-indigo-500"/>;
+                                                        instructionText = `Turn ${modifier} onto ${step.name || 'road'}`;
+                                                    } else if (type === 'new name') {
+                                                        icon = <Navigation size={14} className="text-slate-400"/>;
+                                                        instructionText = `Continue onto ${step.name}`;
+                                                    } else if (type === 'depart') {
+                                                        icon = <Move size={14} className="text-emerald-500"/>;
+                                                        instructionText = `Depart from ${selectedConnection.oc}`;
+                                                    } else if (type === 'arrive') {
+                                                        icon = <MapPin size={14} className="text-red-500"/>;
+                                                        instructionText = `Arrive at ${selectedConnection.cn}`;
+                                                    } else if (type === 'roundabout') {
+                                                        icon = <RefreshCw size={14} className="text-amber-500"/>;
+                                                        instructionText = `Enter roundabout and take exit onto ${step.name || 'road'}`;
+                                                    }
+
+                                                    // Speed Calculation for Segment
+                                                    const speed = step.speed || 0;
+                                                    let speedColorClass = "text-slate-400";
+                                                    if (speed > 60) speedColorClass = "text-emerald-500";
+                                                    else if (speed > 30) speedColorClass = "text-amber-500";
+                                                    else if (speed > 0) speedColorClass = "text-red-400";
 
                                                     return (
-                                                        <div key={idx} className="flex gap-3 text-[10px] py-2 border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors p-1 rounded">
-                                                            <div className="mt-1">{icon}</div>
+                                                        <div key={idx} className="flex gap-3 text-[10px] py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors p-2 rounded group">
+                                                            <div className="font-mono text-slate-300 font-bold text-[9px] mt-0.5 w-4 text-right shrink-0">{idx + 1}.</div>
+                                                            <div className="mt-0.5 shrink-0">{icon}</div>
                                                             <div className="flex-1 min-w-0">
-                                                                <div className="font-bold text-slate-700 mb-0.5 truncate" title={step.name}>{step.name || "Continue on road"}</div>
-                                                                <div className="flex flex-wrap gap-2 text-slate-400 mb-1.5">
-                                                                    <span>{(dist/1000).toFixed(1)} km</span>
-                                                                    <span>•</span>
+                                                                <div className="font-bold text-slate-700 mb-1 leading-tight group-hover:text-indigo-700 transition-colors">{instructionText}</div>
+                                                                <div className="flex items-center gap-2 text-[9px] text-slate-400 font-medium">
+                                                                    <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 border border-slate-200">{(dist/1000).toFixed(2)} km</span>
                                                                     <span>{formatDuration(time)}</span>
                                                                 </div>
                                                             </div>
-                                                            <div className="text-right flex flex-col items-end gap-1">
-                                                                <div className="text-[9px] font-bold">{speedBadge}</div>
+                                                            <div className="text-right flex flex-col items-end justify-center shrink-0 w-12">
+                                                                {speed > 0 && (
+                                                                    <>
+                                                                    <div className={`font-bold text-[10px] ${speedColorClass}`}>{Math.round(speed)}</div>
+                                                                    <div className="text-[7px] text-slate-300 uppercase font-bold">km/h</div>
+                                                                    </>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     )
@@ -1742,59 +1904,6 @@ const App = () => {
                     </div>
                   )}
               </div>
-          )}
-
-          {/* Route Filters (Bottom Right) - Collapsible */}
-          {appState === 'READY' && (
-            <div className="absolute bottom-20 left-6 flex flex-col items-start z-[400] gap-2">
-               <button 
-                  onClick={() => setShowRouteLegend(!showRouteLegend)}
-                  className={`bg-white/90 backdrop-blur p-2.5 rounded-full shadow-lg text-slate-600 hover:text-emerald-600 hover:bg-white transition-all border border-slate-200 ${showRouteLegend ? 'ring-2 ring-emerald-100 text-emerald-600' : ''}`}
-                  title="Route Filters"
-               >
-                  <Filter size={20} strokeWidth={2} />
-               </button>
-
-               {showRouteLegend && (
-                  <div className="bg-white/90 backdrop-blur-md p-4 rounded-xl shadow-2xl text-xs border border-slate-200/50 w-56 animate-fadeIn origin-bottom-left absolute bottom-12 left-0">
-                      <div className="flex justify-between items-center mb-3 border-b border-slate-100 pb-2">
-                          <h4 className="font-bold text-slate-800 uppercase text-[10px] tracking-widest">Route Options</h4>
-                          <button onClick={() => setShowRouteLegend(false)} className="text-slate-400 hover:text-slate-600"><X size={14}/></button>
-                      </div>
-
-                      <div className="space-y-2 mb-4">
-                          <label className="flex items-center justify-between cursor-pointer hover:bg-slate-50/50 p-1.5 rounded transition-colors">
-                              <div className="flex items-center gap-2">
-                                  <span className={`w-2.5 h-2.5 rounded-full ${filters.showOutbound ? 'bg-emerald-500 shadow-sm shadow-emerald-200' : 'bg-slate-300'}`}></span>
-                                  <span className={filters.showOutbound ? 'text-slate-700 font-medium' : 'text-slate-400'}>Outbound</span>
-                              </div>
-                              <input type="checkbox" className="accent-emerald-500" checked={filters.showOutbound} onChange={(e) => setFilters({...filters, showOutbound: e.target.checked})}/>
-                          </label>
-                          <label className="flex items-center justify-between cursor-pointer hover:bg-slate-50/50 p-1.5 rounded transition-colors">
-                              <div className="flex items-center gap-2">
-                                  <span className={`w-2.5 h-2.5 rounded-full ${filters.showInbound ? 'bg-amber-500 shadow-sm shadow-amber-200' : 'bg-slate-300'}`}></span>
-                                  <span className={filters.showInbound ? 'text-slate-700 font-medium' : 'text-slate-400'}>Inbound</span>
-                              </div>
-                              <input type="checkbox" className="accent-amber-500" checked={filters.showInbound} onChange={(e) => setFilters({...filters, showInbound: e.target.checked})}/>
-                          </label>
-                      </div>
-
-                      {Object.keys(filters.vmodes).length > 0 && (
-                          <div className="border-t border-slate-100 pt-3">
-                              <h5 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Service Type</h5>
-                              <div className="space-y-1 max-h-40 overflow-y-auto pr-1 scrollbar-hide">
-                                  {Object.keys(filters.vmodes).sort().map(mode => (
-                                      <label key={mode} className="flex items-center justify-between cursor-pointer hover:bg-slate-50/50 p-1.5 rounded transition-colors">
-                                          <span className={`truncate ${filters.vmodes[mode] ? 'text-slate-600' : 'text-slate-400 line-through'}`}>{mode}</span>
-                                          <input type="checkbox" className="accent-indigo-500" checked={filters.vmodes[mode]} onChange={(e) => setFilters(p => ({...p, vmodes: {...p.vmodes, [mode]: e.target.checked}}))}/>
-                                      </label>
-                                  ))}
-                              </div>
-                          </div>
-                      )}
-                  </div>
-               )}
-            </div>
           )}
         </main>
       </div>
