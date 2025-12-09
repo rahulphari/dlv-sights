@@ -1066,10 +1066,7 @@ const App = () => {
                     </div>
                     <h2 className="text-2xl font-bold mb-2">DLV-SIGHTS IS READY!</h2>
                     <p className="text-slate-400 text-sm mb-8">
-                        Disclaimer: DLV-SIGHTS uses RouteDbData from DoctorHub for connection mapping. 
-                        Although data is updated regularly, the most recent changes may not always be reflected, as the database requires manual updates. 
-                        Please intimate us of any discrepancies observed.This tool is intended only for assistive overview and interpretation. 
-                        Do not rely solely on this data for decision-making.
+                        Disclaimer: DLV-SIGHTS uses RouteDbData from DoctorHub for connection mapping. Although data is updated regularly, the most recent changes may not always be reflected, as the database requires manual updates. Please intimate us of any discrepancies observed.This tool is intended only for assistive overview and interpretation. Do not rely solely on this data for decision-making.
                     </p>
                     <button 
                         onClick={handleVerifyEntry}
