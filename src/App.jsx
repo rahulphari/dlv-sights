@@ -2169,14 +2169,8 @@ const App = () => {
                            <div className="text-xs text-slate-500 mb-4 bg-slate-50 p-2 rounded border border-slate-100 leading-relaxed">
   <p>
     This is a work in progress; some visual or functional inconsistencies may be present and are actively being addressed.
-  </p>
-
-  <p className="mt-1">
-    A known issue includes incorrect mapping of touchpoints and ETD timings in the case of multi-stop (non-roundtrip) routes.
-  </p>
-
-  <p className="mt-1">
-    For the time being, please click on the route line on the map to view individual details for any data-inconsistent lane. Thank you.
+    A known issue includes incorrect mapping of touchpoints and ETD timings in the case of multi-stop/roundtrip routes.
+    Please click on respective route line on the map to view individual details for any data-inconsistent lane.       
   </p>
 </div>
                             
@@ -2245,7 +2239,7 @@ const App = () => {
                                 ))}
                             </div>
                         </div>
-                        <button onClick={() => { setSelectedRouteGroup(null); }} className="w-full py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded transition-colors">This is a work in progress; some visual or functional inconsistencies may be present and are actively being addressed. A known issue includes incorrect mapping of route touchpoints and ETD timings in the case of multi-stop / roundtrip routes.  For the time being, please click on the route line on the map to view individual details for any data-inconsistent lane. Thank you.</button>
+                        <button onClick={() => { setSelectedRouteGroup(null); }} className="w-full py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded transition-colors">MAP VIEW.</button>
                     </div>
                 ) : selectedConnection ? (
                     // ROUTE DETAIL VIEW WITH METRICS
