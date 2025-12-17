@@ -366,7 +366,7 @@ const RoundTripCard = ({ data, onSelect }) => {
                         <span className="text-[10px] text-slate-400 font-mono">ID: {routeId}</span>
                     </div>
                     <div className="text-right">
-                        <div className="text-[10px] text-slate-400 font-medium">Mission Duration</div>
+                        <div className="text-[10px] text-slate-400 font-medium">Trip Duration</div>
                         <div className="text-xs font-black text-pink-600 font-mono">{startTime} - {endTime}</div>
                     </div>
                 </div>
@@ -1944,10 +1944,10 @@ const App = () => {
                         <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full"></div>
                         <ShieldCheck size={64} className="text-emerald-500 relative z-10" />
                     </div>
-                    <h2 className="text-2xl font-bold mb-2">DLV-SIGHTS IS READY!</h2>
+                    <h2 className="text-2xl font-bold mb-2">Disclaimer</h2>
                  <div className="max-w-2xl text-sm text-slate-300 leading-relaxed mb-8">
   <p>
-    <strong className="text-white block mb-1">Disclaimer</strong>
+    <strong className="text-white block mb-1">IMPORTANT</strong>
     DLV-SIGHTS uses <em className="not-italic font-medium text-slate-200">RouteDbData</em> from DoctorHub for connection mapping. 
     While data is updated regularly, this database relies on manual updates and may not reflect real-time changes. 
     Please <button className="underline hover:text-white decoration-slate-500 underline-offset-4">report any discrepancies</button>.
@@ -2120,7 +2120,7 @@ const App = () => {
                         <div className="bg-white border border-pink-200 rounded-lg p-3 shadow-sm relative overflow-hidden">
                             <div className="absolute top-0 right-0 p-2 opacity-5"><Activity size={64}/></div>
                             
-                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Mission Control</h4>
+                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Trip Control</h4>
                             
                             {/* METRICS GRID */}
                             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -2165,11 +2165,21 @@ const App = () => {
                         <div className="bg-white border border-indigo-200 rounded-lg p-4 shadow-sm">
                             <h3 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
                                 <List size={16} className="text-indigo-500"/> 
-                                Mission Manifest
+                                Trip Manifest
                             </h3>
-                            <div className="text-xs text-slate-500 mb-4 bg-slate-50 p-2 rounded border border-slate-100 leading-relaxed">
-                                Detailed breakdown of driving legs and inferred operational buffers at each facility.
-                            </div>
+                           <div className="text-xs text-slate-500 mb-4 bg-slate-50 p-2 rounded border border-slate-100 leading-relaxed">
+  <p>
+    This is a work in progress; some visual or functional inconsistencies may be present and are actively being addressed.
+  </p>
+
+  <p className="mt-1">
+    A known issue includes incorrect mapping of touchpoints and ETD timings in the case of multi-stop (non-roundtrip) routes.
+  </p>
+
+  <p className="mt-1">
+    For the time being, please click on the route line on the map to view individual details for any data-inconsistent lane. Thank you.
+  </p>
+</div>
                             
                             <div className="space-y-0 relative pl-2">
                                 {/* Vertical Line */}
@@ -2207,12 +2217,12 @@ const App = () => {
                                                 {/* Dwell Time Highlight */}
                                                 {stop.dwellTime > 0 && (
                                                     <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 w-fit">
-                                                        <ArrowLeftRight size={10}/> {stop.dwellTime}m Turnaround
+                                                        <ArrowLeftRight size={10}/> {stop.dwellTime}m Unloading/Loading Buffer
                                                     </div>
                                                 )}
                                                 
-                                                {i === 0 && <div className="text-[9px] text-slate-400 mt-1">Mission Start</div>}
-                                                {stop.type === 'end' && <div className="text-[9px] text-emerald-500 font-bold mt-1">Mission Complete</div>}
+                                                {i === 0 && <div className="text-[9px] text-slate-400 mt-1">Trip Start</div>}
+                                                {stop.type === 'end' && <div className="text-[9px] text-emerald-500 font-bold mt-1">Trip Complete</div>}
                                             </div>
                                         </div>
 
@@ -2236,7 +2246,7 @@ const App = () => {
                                 ))}
                             </div>
                         </div>
-                        <button onClick={() => { setSelectedRouteGroup(null); }} className="w-full py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded transition-colors">Return to Hub View</button>
+                        <button onClick={() => { setSelectedRouteGroup(null); }} className="w-full py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded transition-colors">This is a work in progress; some visual or functional inconsistencies may be present and are actively being addressed. A known issue includes incorrect mapping of route touchpoints and ETD timings in the case of multi-stop / roundtrip routes.  For the time being, please click on the route line on the map to view individual details for any data-inconsistent lane. Thank you.</button>
                     </div>
                 ) : selectedConnection ? (
                     // ROUTE DETAIL VIEW WITH METRICS
