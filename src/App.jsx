@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed, Sparkles, Route as RouteIcon, ArrowLeft, Timer, Activity, TrendingUp, Lightbulb, Lock, Unlock, Zap, Satellite, BarChart3, Gauge, Milestone, List, PieChart, Info, Bell, ShieldCheck, CheckCircle2, Cpu, Globe, WifiOff, Settings, CornerUpLeft, CornerUpRight, Move, Ban, Eye } from 'lucide-react';
+import { Map as MapIcon, Layers, Truck, ArrowRight, Filter, Database, AlertCircle, RefreshCw, MapPin, Square, ChevronUp, ChevronDown, Minimize2, Navigation, Tag, SlidersHorizontal, ArrowDownUp, Sun, Moon, Sunrise, Sunset, AlertTriangle, MessageSquare, Cloud, CloudRain, CloudLightning, CloudSnow, Clock as ClockIcon, Thermometer, X, Loader2, Search, LocateFixed, Sparkles, Route as RouteIcon, ArrowLeft, Timer, Activity, TrendingUp, Lightbulb, Lock, Unlock, Zap, Satellite, BarChart3, Gauge, Milestone, List, PieChart, Info, Bell, ShieldCheck, CheckCircle2, Cpu, Globe, WifiOff, Settings, CornerUpLeft, CornerUpRight, Move, Ban, Eye, GitMerge, GitCommit, Repeat, ArrowUpCircle, ArrowDownCircle, History, Waypoints, Package, Hourglass, PlayCircle, StopCircle, ArrowLeftRight, Flag } from 'lucide-react';
 
 // ==========================================
 // 1. DATA SOURCE CONFIGURATION
@@ -53,9 +53,14 @@ const LOADING_TIPS = [
         desc: "Visualize the entire logistics web. Blue nodes represent Hubs, while Violet nodes indicate Gateways." 
     },
     { 
-        icon: <Truck size={24} className="text-emerald-400"/>,
-        title: "Route Analytics", 
-        desc: "Click on any connection line to inspect detailed metrics like ETA, TAT, vehicle types, and road vs. air distance." 
+        icon: <Repeat size={24} className="text-pink-400"/>,
+        title: "Round Trip Logic", 
+        desc: "Advanced algos now stitch together Forward and Reverse legs into complete Round Trip circuits." 
+    },
+    { 
+        icon: <Waypoints size={24} className="text-emerald-400"/>,
+        title: "Full Route Tracing", 
+        desc: "Click on any multi-stop route to see the vehicle's entire journey traced sequentially on the map." 
     },
     { 
         icon: <Search size={24} className="text-indigo-400"/>,
@@ -63,16 +68,19 @@ const LOADING_TIPS = [
         desc: "Type a pincode (e.g., '110037') or a partial address to instantly fly the camera to the nearest facility." 
     },
     { 
-        icon: <CloudRain size={24} className="text-cyan-400"/>,
-        title: "Live Weather Intel", 
-        desc: "Check real-time weather conditions for any selected facility directly from the dashboard header." 
-    },
-    { 
-        icon: <Satellite size={24} className="text-purple-400"/>,
-        title: "Precision Routing", 
-        desc: "Unlock the Mapbox mode to generate high-fidelity, turn-by-turn road paths for accurate distance calculations." 
+        icon: <Hourglass size={24} className="text-amber-400"/>,
+        title: "Buffer Calculation", 
+        desc: "The system automatically deduces loading/unloading times at each stop by comparing schedule vs. road time." 
     }
 ];
+
+// Flag Icon Component
+const FlagIcon = ({ size, className }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+        <line x1="4" y1="22" x2="4" y2="15"></line>
+    </svg>
+);
 
 // Utility to load external scripts/styles dynamically
 const useExternalResource = (url, type) => {
@@ -129,6 +137,39 @@ const formatDuration = (seconds) => {
     const m = Math.floor((seconds % 3600) / 60);
     if (h === 0) return `${m}m`;
     return `${h}h ${m}m`;
+};
+
+// Helper: Parse HH:MM to minutes from midnight
+const parseTime = (timeStr) => {
+    if (!timeStr) return 0;
+    const [h, m] = timeStr.split(':').map(Number);
+    return (h * 60) + m;
+};
+
+// Helper: Format minutes to HH:MM
+const formatTimeFromMinutes = (minutes) => {
+    let m = Math.round(minutes);
+    // Handle day wrap
+    while (m < 0) m += 1440;
+    while (m >= 1440) m -= 1440;
+    
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    return `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+};
+
+// Helper: Calculate duration between two time strings in MINUTES (handles midnight crossing)
+const calculateTimeDiffMinutes = (startStr, endStr) => {
+    if (!startStr || !endStr) return 0;
+    let start = parseTime(startStr);
+    let end = parseTime(endStr);
+    if (end < start) end += 24 * 60; // Assume next day if end < start
+    return end - start;
+};
+
+// Helper: Calculate duration between two time strings in HOURS
+const calculateTimeDiffHours = (startStr, endStr) => {
+    return calculateTimeDiffMinutes(startStr, endStr) / 60;
 };
 
 // Shift Helper
@@ -201,7 +242,7 @@ const WeatherWidget = ({ lat, lng, locationName }) => {
 
     if (loading) return (
         <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded text-slate-400 text-[10px] font-mono animate-pulse">
-            Loading Weather...
+            Loading...
         </div>
     );
 
@@ -250,11 +291,11 @@ const LiveClock = () => {
 const TipsTicker = () => {
     const tips = [
         "Tip: Search by Pincode (e.g. '110037') to find the nearest hub instantly.",
-        "Pro Tip: In Route Focus, red lines on the map indicate slow/local roads.",
+        "Feature: Round Trips now auto-detected! Look for the 'Round Trip' cards.",
         "Did you know? You can see the live weather information of the selected facility on top-right!",
-        "Tip: Use the 'Smart Find' button to locate hubs by raw address text.",
+        "Tip: Click on a Round Trip card to trace the entire vehicle journey on the map.",
         "Guide: Blue = Hubs, Violet = Gateways, Cyan = IPCs.",
-        "Tip: Check the 'Route Anatomy' section for a factual breakdown of time spent in different speed zones."
+        "Tip: Use the Smart Search to find locations by raw address text."
     ];
     
     const [currentTip, setCurrentTip] = useState(0);
@@ -301,6 +342,228 @@ const NotificationBanner = ({ notification, onClose }) => {
     );
 }
 
+// --- COMPONENT: ROUND TRIP CARD (Creative Circuit View) ---
+const RoundTripCard = ({ data, onSelect }) => {
+    const { routeId, forward, reverse } = data;
+    
+    // Calculate Stats
+    // Start is first forward cutoff
+    const startTime = forward[0].cutoff;
+    // End is last reverse ETA
+    const endTime = reverse[reverse.length - 1].eta;
+    
+    // Construct Route Name: "OC -> P1 -> P2 -> OC"
+    const sequenceNames = [forward[0].oc, ...forward.map(f => f.cn)];
+    const routeDisplayName = sequenceNames.join(' → ');
+
+    return (
+        <div onClick={() => onSelect(data)} className="bg-white border border-pink-200 rounded-xl p-0 shadow-md relative overflow-hidden group hover:border-pink-400 transition-all mb-3 cursor-pointer">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-pink-50 to-white p-3 border-b border-pink-100">
+                <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-2">
+                        <span className="bg-pink-100 text-pink-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-pink-200 uppercase tracking-wide flex items-center gap-1">
+                            <Repeat size={10}/> Round Trip
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono">ID: {routeId}</span>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-[10px] text-slate-400 font-medium">Mission Duration</div>
+                        <div className="text-xs font-black text-pink-600 font-mono">{startTime} - {endTime}</div>
+                    </div>
+                </div>
+                <div className="text-xs font-bold text-slate-700 leading-tight">
+                    {routeDisplayName}
+                </div>
+            </div>
+
+            {/* Circuit Visualization */}
+            <div className="p-3 relative">
+                {/* Center Spine */}
+                <div className="absolute left-1/2 top-4 bottom-4 w-px bg-slate-100 transform -translate-x-1/2"></div>
+
+                <div className="flex gap-4">
+                    {/* Left: Forward / Outbound */}
+                    <div className="flex-1">
+                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-3 text-center flex items-center justify-center gap-1">
+                            <ArrowDownCircle size={10} className="text-emerald-500"/> Outbound
+                        </div>
+                        <div className="space-y-3 relative">
+                            {/* Line */}
+                            <div className="absolute right-0 top-2 bottom-2 w-0.5 bg-gradient-to-b from-emerald-200 to-emerald-50/0 rounded-full"></div>
+                            
+                            {/* Start Point */}
+                            <div className="flex flex-col items-end relative pr-3 group/step">
+                                <div className="absolute right-[-3px] top-1.5 w-1.5 h-1.5 rounded-full bg-slate-400 border border-white shadow-sm z-10"></div>
+                                <div className="text-[10px] font-bold text-slate-700">{forward[0].oc}</div>
+                                <div className="text-[8px] font-mono text-slate-400">Dep: {forward[0].cutoff}</div>
+                            </div>
+
+                            {forward.map((stop, i) => (
+                                <div key={i} className="flex flex-col items-end relative pr-3 group/step">
+                                    <div className="absolute right-[-3px] top-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 border border-white shadow-sm z-10"></div>
+                                    <div className="text-[10px] font-bold text-slate-700 group-hover/step:text-indigo-600 transition-colors">{stop.cn}</div>
+                                    <div className="text-[8px] font-mono text-emerald-600 bg-emerald-50 px-1 rounded border border-emerald-100">
+                                        Arr: {stop.eta}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Right: Reverse / Inbound */}
+                    <div className="flex-1">
+                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-3 text-center flex items-center justify-center gap-1">
+                            <ArrowUpCircle size={10} className="text-amber-500"/> Inbound
+                        </div>
+                        <div className="space-y-3 relative">
+                             {/* Line */}
+                             <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-gradient-to-t from-amber-200 to-amber-50/0 rounded-full"></div>
+
+                             {reverse.map((stop, i) => (
+                                <div key={i} className="flex flex-col items-start relative pl-3 group/step">
+                                    <div className="absolute left-[-3px] top-1.5 w-1.5 h-1.5 rounded-full bg-amber-500 border border-white shadow-sm z-10"></div>
+                                    <div className="text-[10px] font-bold text-slate-700 group-hover/step:text-indigo-600 transition-colors">{stop.oc}</div>
+                                    <div className="text-[8px] font-mono text-amber-600 bg-amber-50 px-1 rounded border border-amber-100">
+                                        Dep: {stop.cutoff}
+                                    </div>
+                                </div>
+                            ))}
+                            
+                            {/* Final Point */}
+                            <div className="flex flex-col items-start relative pl-3 group/step">
+                                <div className="absolute left-[-3px] top-1.5 w-1.5 h-1.5 rounded-full bg-slate-800 border border-white shadow-sm z-10"></div>
+                                <div className="text-[10px] font-bold text-slate-700">{reverse[reverse.length-1].cn}</div>
+                                <div className="text-[8px] font-mono text-slate-400">Arr: {reverse[reverse.length-1].eta}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                {/* Loop Connector Visual at bottom */}
+                <div className="mt-2 flex justify-center">
+                    <div className="h-1 w-1/2 bg-gradient-to-r from-emerald-100 via-slate-200 to-amber-100 rounded-full"></div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- COMPONENT: ROUTE CARD (Standard) ---
+const RouteCard = ({ type, data, onSelect, facilityMap }) => {
+    const isMilkRun = data.stops && data.stops.length > 1;
+
+    // Direct (Single) Connection Card
+    if (!isMilkRun) {
+        const conn = isMilkRun ? data.stops[0] : data;
+        const isOutbound = type === 'outbound';
+        const colorClass = isOutbound ? 'emerald' : 'amber';
+        
+        return (
+            <div onClick={() => onSelect(conn)} className={`bg-${colorClass}-50/50 border border-${colorClass}-100 p-3 rounded-lg hover:bg-${colorClass}-50 transition-colors shadow-sm cursor-pointer hover:border-${colorClass}-300 group`}>
+                <div className="flex justify-between items-start mb-2">
+                    <span className={`text-sm font-bold text-${colorClass}-900`}>{isOutbound ? conn.cn : conn.oc}</span>
+                    <div className="flex flex-col items-end">
+                        <span className={`text-[10px] font-bold text-${colorClass}-700 border border-${colorClass}-200 bg-white px-1.5 py-0.5 rounded mb-1`}>{conn.vmode}</span>
+                        <span className="text-[10px] text-slate-500 font-medium">{conn.vehicle_size}</span>
+                    </div>
+                </div>
+                
+                <div className={`flex items-center justify-between text-xs mt-2 bg-white/60 p-2 rounded border border-${colorClass}-100/50`}>
+                    <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">ETD</span>
+                        <span className={`font-bold text-${colorClass}-700 text-sm`}>{conn.cutoff}</span>
+                    </div>
+                    <div className="flex flex-col items-center px-2">
+                        <span className="text-[10px] text-slate-400 mb-0.5 font-mono bg-slate-100 px-1 rounded">{conn.tat}h</span>
+                        <div className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1 rounded border border-slate-200">{conn.dist > 0 ? conn.dist + ' km' : 'N/A'}</div>
+                    </div>
+                    <div className="flex flex-col items-end">
+                        <span className="text-[10px] text-slate-400 font-medium uppercase">ETA</span>
+                        <span className="text-slate-600 font-medium">{conn.eta}</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Milk Run Card (One Way)
+    const stops = data.stops;
+    const isOutbound = type === 'outbound';
+    
+    return (
+        <div onClick={() => onSelect(data)} className="bg-white border border-slate-200 rounded-lg p-3 shadow-md relative overflow-hidden group hover:border-indigo-300 transition-all cursor-pointer">
+            {/* Header Badge */}
+            <div className="absolute top-0 right-0 bg-indigo-500 text-white text-[9px] font-bold px-2 py-1 rounded-bl-lg shadow-sm flex items-center gap-1">
+                <GitMerge size={10} className="text-indigo-100"/> MILK RUN
+            </div>
+
+            <div className="mb-3 pr-16">
+                <div className="text-[10px] font-bold text-indigo-500 uppercase tracking-wide mb-0.5">
+                    {isOutbound ? 'Multi-Stop Distribution' : 'Multi-Stop Collection'}
+                </div>
+                <div className="text-xs text-slate-500 font-mono">
+                    {stops[0].vmode} • {stops[0].vehicle_size}
+                </div>
+            </div>
+
+            {/* Stepper Visualization */}
+            <div className="relative pl-2 py-1">
+                <div className="absolute left-[13px] top-2 bottom-2 w-0.5 bg-slate-200"></div>
+
+                {isOutbound && (
+                    <div className="flex items-center gap-3 mb-4 relative z-10">
+                        <div className="w-6 h-6 rounded-full bg-slate-800 border-2 border-white shadow-sm flex items-center justify-center shrink-0">
+                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                        </div>
+                        <div>
+                            <div className="text-xs font-black text-slate-800">{stops[0].oc}</div>
+                            <div className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded inline-block border border-emerald-100">
+                                Dep: {stops[0].cutoff}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {stops.map((stop, idx) => {
+                    const isLast = idx === stops.length - 1;
+                    const nodeName = isOutbound ? stop.cn : stop.oc;
+                    const timeLabel = isOutbound ? `Arr: ${stop.eta}` : `Dep: ${stop.cutoff}`;
+                    const timeColor = isOutbound ? 'text-slate-500' : 'text-slate-500';
+
+                    return (
+                        <div key={idx} className="flex items-start gap-3 mb-4 last:mb-0 relative z-10 group/stop">
+                            <div className={`w-6 h-6 rounded-full border-2 border-white shadow-sm flex items-center justify-center shrink-0 transition-colors ${isLast && !isOutbound ? 'bg-slate-800' : 'bg-white border-indigo-200'}`}>
+                                <div className={`w-2 h-2 rounded-full ${isLast && !isOutbound ? 'bg-white' : 'bg-indigo-500'}`}></div>
+                            </div>
+                            <div className="flex-1 -mt-0.5 p-1.5 rounded hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all">
+                                <div className="text-xs font-bold text-slate-700 group-hover/stop:text-indigo-600">{nodeName}</div>
+                                <div className={`text-[9px] font-mono ${timeColor} flex items-center gap-2`}>
+                                    <span>{timeLabel}</span>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+
+                {!isOutbound && (
+                    <div className="flex items-center gap-3 mt-0 relative z-10">
+                         <div className="w-6 h-6 rounded-full bg-slate-800 border-2 border-white shadow-sm flex items-center justify-center shrink-0">
+                            <div className="w-2 h-2 bg-white rounded-full"></div>
+                        </div>
+                        <div>
+                            <div className="text-xs font-black text-slate-800">{stops[0].cn}</div>
+                            <div className="text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded inline-block border border-amber-100">
+                                Arr: {stops[0].eta}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
 const App = () => {
   const leafletCssLoaded = useExternalResource('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', 'style');
   const leafletJsLoaded = useExternalResource('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', 'script');
@@ -313,6 +576,7 @@ const App = () => {
   // SELECTION STATE
   const [selectedFacility, setSelectedFacility] = useState(null);
   const [selectedConnection, setSelectedConnection] = useState(null);
+  const [selectedRouteGroup, setSelectedRouteGroup] = useState(null); // For Multi-Stop/RoundTrip
   
   const [facilityStats, setFacilityStats] = useState({ total: 0, active: 0 });
   const [connectionStats, setConnectionStats] = useState({ total: 0, valid: 0 });
@@ -320,6 +584,7 @@ const App = () => {
   const [filters, setFilters] = useState({
       showOutbound: true,
       showInbound: true,
+      showRoundTrips: true, // NEW FILTER
       vmodes: {}
   });
 
@@ -463,6 +728,7 @@ const App = () => {
   const handleSearchSelect = (facility) => {
       setSelectedFacility(facility);
       setSelectedConnection(null); 
+      setSelectedRouteGroup(null);
       if (mapInstanceRef.current) {
           mapInstanceRef.current.flyTo([facility.lat, facility.lng], 10, { duration: 1.5 });
       }
@@ -470,8 +736,75 @@ const App = () => {
       setIsSearchFocused(false);
   };
 
-  const handleConnectionClick = (connection) => {
-      setSelectedConnection(connection);
+  const handleConnectionClick = (data) => {
+      if (data.forward || data.stops) {
+          // It's a complex route (Round Trip or Milk Run)
+          setSelectedRouteGroup(data);
+          setSelectedConnection(null);
+          // Trigger Multi-Stop Routing
+          handleMultiStopRoute(data);
+      } else {
+          // Standard Single Connection
+          setSelectedConnection(data);
+          setSelectedRouteGroup(null);
+      }
+  };
+
+  // NEW: Handle Multi-Stop Route Calculation and Visualization
+  const handleMultiStopRoute = async (groupData) => {
+      if (!groupData) return;
+      
+      // 1. Construct Waypoints List (Sequence of Lat/Lngs for Routing)
+      let waypoints = [];
+      
+      if (groupData.forward && groupData.reverse) {
+          // Round Trip - Create linear sequence
+          waypoints.push(groupData.forward[0].oc);
+          groupData.forward.forEach(s => waypoints.push(s.cn));
+          // Reverse sequence (usually retracing or looping back)
+          // We can append reverse stops. Note: reverse[0].oc is usually same as forward[last].cn
+          groupData.reverse.forEach(s => waypoints.push(s.cn)); // reverse cn is the destination of inbound leg
+      } else if (groupData.stops) {
+          // Milk Run
+          const first = groupData.stops[0];
+          waypoints.push(first.oc);
+          groupData.stops.forEach(s => waypoints.push(s.cn));
+      }
+
+      // Map Names to Lat/Lng
+      const points = waypoints.map(name => {
+          const fac = facilityMap[name];
+          return fac ? { lat: fac.lat, lng: fac.lng } : null;
+      }).filter(p => p !== null);
+
+      // Remove adjacent duplicates to avoid OSRM errors (0 distance segments)
+      const cleanPoints = points.filter((p, i) => {
+          if (i === 0) return true;
+          return p.lat !== points[i-1].lat || p.lng !== points[i-1].lng;
+      });
+
+      if (cleanPoints.length < 2) return;
+
+      // 2. Fetch Route
+      const routeKey = `MULTI_${groupData.routeId || groupData.stops[0].oc}`;
+      if (routeCache.current[routeKey]) {
+          setActivePaths(prev => ({ ...prev, [routeKey]: routeCache.current[routeKey] }));
+          return;
+      }
+
+      setIsGenerating(true);
+      try {
+          const data = await fetchRouteOSRMMulti(cleanPoints);
+          if (data) {
+              routeCache.current[routeKey] = data;
+              setActivePaths(prev => ({ ...prev, [routeKey]: data }));
+          }
+      } catch (e) {
+          console.error("Multi-stop route failed", e);
+          showToast("Could not trace full route path.", 'error');
+      } finally {
+          setIsGenerating(false);
+      }
   };
 
   const handleUnlockMapbox = () => {
@@ -739,8 +1072,10 @@ const App = () => {
                                 const cnClean = cleanName(row.cn);
                                 const vehSize = row.vehicle_size ? row.vehicle_size.trim() : 'Unknown';
                                 const vmode = row.vmode ? row.vmode.trim().toUpperCase() : 'UNKNOWN';
+                                const routeId = row.route_id ? row.route_id.trim() : 'NA';
+                                const routeSetId = row.route_set_id ? row.route_set_id.trim() : 'NA';
                                 
-                                const uniqueKey = `${ocClean}|${cnClean}|${row.cutoff_departure}|${row.eta}|${row.tat}|${vmode}|${vehSize}`;
+                                const uniqueKey = `${ocClean}|${cnClean}|${row.cutoff_departure}|${row.eta}|${row.tat}|${vmode}|${vehSize}|${routeId}|${routeSetId}`;
                                 
                                 if (!seenConnections.has(uniqueKey)) {
                                     parsedConnections.push({
@@ -750,7 +1085,9 @@ const App = () => {
                                         cutoff: row.cutoff_departure,
                                         eta: row.eta,
                                         tat: row.tat,
-                                        vehicle_size: vehSize
+                                        vehicle_size: vehSize,
+                                        route_id: routeId,
+                                        route_set_id: routeSetId
                                     });
                                     seenConnections.add(uniqueKey);
                                     valid++;
@@ -831,6 +1168,28 @@ const App = () => {
           });
           const segments = Object.values(aggregated).map(s => ({...s, speed: s.time > 0 ? (s.dist / 1000) / (s.time / 3600) : 0})).sort((a,b) => b.dist - a.dist);
           return { coords: route.geometry.coordinates.map(c => [c[1], c[0]]), metrics: { distance: route.distance, duration: route.duration }, segments: segments, rawSteps: rawSegments };
+      }
+      return null;
+  };
+
+  // NEW: Fetch Route for Multiple Points and Return LEGS
+  const fetchRouteOSRMMulti = async (points) => {
+      // points = [{lat, lng}, {lat, lng}, ...]
+      const coords = points.map(p => `${p.lng},${p.lat}`).join(';');
+      const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&steps=true`;
+      
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.routes && data.routes[0]) {
+          const route = data.routes[0];
+          
+          // OSRM returns 'legs' array where leg[i] is from waypoint[i] to waypoint[i+1]
+          // We need this detailed leg data for the buffer calculation
+          return { 
+              coords: route.geometry.coordinates.map(c => [c[1], c[0]]), 
+              metrics: { distance: route.distance, duration: route.duration },
+              legs: route.legs // Array of leg objects with duration and distance
+          };
       }
       return null;
   };
@@ -937,6 +1296,7 @@ const App = () => {
     const bounds = L.latLngBounds();
     let hasLayers = false;
     const connectedToSelection = new Set();
+    
     if (selectedFacility) {
         connections.forEach(conn => {
             if (conn.oc === selectedFacility.name) connectedToSelection.add(conn.cn);
@@ -944,16 +1304,44 @@ const App = () => {
         });
         connectedToSelection.add(selectedFacility.name); 
     }
+
+    // 1. Draw Multi-Stop Route if Selected
+    if (selectedRouteGroup) {
+        // Find Multi-Path in Cache
+        const groupKey = `MULTI_${selectedRouteGroup.routeId || selectedRouteGroup.stops[0].oc}`;
+        const cachedPath = activePaths[groupKey];
+        
+        if (cachedPath && cachedPath.coords) {
+            // Draw Continuous Trace
+            const polyline = L.polyline(cachedPath.coords, { color: '#ec4899', weight: 5, opacity: 0.9, lineJoin: 'round' });
+            polyline.bindTooltip(`<div class="font-bold text-xs text-pink-600">Full Route Trace</div><div class="text-[9px]">${formatDuration(cachedPath.metrics.duration)}</div>`, { sticky: true });
+            polyline.addTo(layerGroup);
+            mapInstanceRef.current.fitBounds(polyline.getBounds(), { padding: [50, 50] });
+            hasLayers = true;
+        } else {
+            // Fallback: Draw straight lines between points if no geom yet
+            // (Will happen briefly while fetching)
+        }
+    }
+
     connections.forEach(conn => {
+      // Logic for rendering individual connections
+      // Skip if looking at a specific multi-route group to reduce clutter?
+      // Or keep them faint. Let's hide others if selectedRouteGroup is active to focus.
+      if (selectedRouteGroup) return;
+
       const origin = facilityMap[conn.oc];
       const dest = facilityMap[conn.cn];
       if (!origin || !dest) return;
+      
       const isRelatedToSelection = selectedFacility && (conn.oc === selectedFacility.name || conn.cn === selectedFacility.name);
       const isOriginVisible = facTypeFilters[origin.type];
       const isDestVisible = facTypeFilters[dest.type];
+      
       let shouldRenderLine = false;
       if (selectedFacility) { if (isRelatedToSelection) shouldRenderLine = true; } 
       else { if (isOriginVisible && isDestVisible) shouldRenderLine = true; }
+      
       if (shouldRenderLine) {
         if (selectedFacility) {
              const isOutbound = selectedFacility.name === conn.oc;
@@ -964,9 +1352,11 @@ const App = () => {
         if (!filters.vmodes[conn.vmode]) return;
         const isFocused = selectedConnection && selectedConnection.oc === conn.oc && selectedConnection.cn === conn.cn && selectedConnection.vmode === conn.vmode && selectedConnection.cutoff === conn.cutoff;
         if (selectedConnection && !isFocused) return;
+        
         let latlngs = [[origin.lat, origin.lng], [dest.lat, dest.lng]]; 
         const routeKey = `${conn.oc}|${conn.cn}`;
         const cachedData = activePaths[routeKey];
+        
         if (!isFocused) {
             if (cachedData && cachedData.coords) latlngs = cachedData.coords;
             let color = '#334155'; let weight = 1.5; let opacity = 0.5;
@@ -1006,15 +1396,37 @@ const App = () => {
         }
       }
     });
+    
+    // Render Facilities
     facilities.forEach(fac => {
       const stats = globalFacilityStats[fac.name];
       const hasConnections = stats && (stats.in > 0 || stats.out > 0);
       if (!hasConnections) return; 
+      
       const isSelected = selectedFacility?.name === fac.name;
       const isConnected = selectedFacility && connectedToSelection.has(fac.name);
-      let isVisible = facTypeFilters[fac.type] || isSelected || isConnected;
-      if (selectedConnection) { if (fac.name === selectedConnection.oc || fac.name === selectedConnection.cn) isVisible = true; else isVisible = false; }
+      
+      // If RouteGroup Selected, only show relevant nodes
+      let isVisible = true;
+      if (selectedRouteGroup) {
+          // Check if this facility is part of the route group
+          let isInGroup = false;
+          if (selectedRouteGroup.forward) {
+              // Round Trip
+              if (selectedRouteGroup.forward.some(c => c.oc === fac.name || c.cn === fac.name)) isInGroup = true;
+              if (selectedRouteGroup.reverse.some(c => c.oc === fac.name || c.cn === fac.name)) isInGroup = true;
+          } else if (selectedRouteGroup.stops) {
+              // Milk Run
+              if (selectedRouteGroup.stops.some(c => c.oc === fac.name || c.cn === fac.name)) isInGroup = true;
+          }
+          isVisible = isInGroup;
+      } else {
+          isVisible = facTypeFilters[fac.type] || isSelected || isConnected;
+          if (selectedConnection) { if (fac.name === selectedConnection.oc || fac.name === selectedConnection.cn) isVisible = true; else isVisible = false; }
+      }
+
       if (!isVisible) return;
+      
       hasLayers = true;
       const style = getFacilityStyle(fac.type, isSelected);
       
@@ -1024,20 +1436,20 @@ const App = () => {
       }
 
       const marker = L.circleMarker([fac.lat, fac.lng], style);
-      marker.on('click', () => { setSelectedFacility(fac); setSelectedConnection(null); mapInstanceRef.current.flyTo([fac.lat, fac.lng], 6, { duration: 1.5 }); });
+      marker.on('click', () => { setSelectedFacility(fac); setSelectedConnection(null); setSelectedRouteGroup(null); mapInstanceRef.current.flyTo([fac.lat, fac.lng], 6, { duration: 1.5 }); });
       const fStats = stats || { in: 0, out: 0 };
       let typeColorClass = 'text-slate-500'; if (fac.type === 'GW') typeColorClass = 'text-violet-600'; if (fac.type === 'H') typeColorClass = 'text-blue-600'; if (fac.type === 'I') typeColorClass = 'text-cyan-600';
       const tooltipHTML = `<div class="min-w-[180px] font-sans"><div class="border-b border-slate-100 pb-1 mb-1"><div class="font-bold text-sm text-slate-800">${fac.name}</div><div class="text-[10px] text-slate-500 truncate flex items-center gap-1 mt-0.5"><span>📍</span> ${fac.address}</div></div><div class="grid grid-cols-3 gap-1 text-center"><div class="bg-slate-50 rounded p-1 border border-slate-100"><div class="text-[8px] uppercase text-slate-400 font-bold tracking-wider">Type</div><div class="font-bold text-xs ${typeColorClass}">${fac.type}</div></div><div class="bg-emerald-50 rounded p-1 border border-emerald-100"><div class="text-[8px] uppercase text-emerald-400 font-bold tracking-wider">Out</div><div class="font-bold text-xs text-emerald-700">${fStats.out}</div></div><div class="bg-amber-50 rounded p-1 border border-amber-100"><div class="text-[8px] uppercase text-amber-400 font-bold tracking-wider">In</div><div class="font-bold text-xs text-amber-700">${fStats.in}</div></div></div></div>`;
       marker.bindTooltip(tooltipHTML, { direction: 'top', className: 'custom-tooltip-card', opacity: 1 });
       marker.addTo(layerGroup);
-      if (isSelected || isConnected) { marker.bringToFront(); }
+      if (isSelected || isConnected || (selectedRouteGroup && isVisible)) { marker.bringToFront(); }
       bounds.extend([fac.lat, fac.lng]);
     });
-    if (hasLayers && !selectedFacility && !selectedConnection && !mapRef.current.dataset.initialFit) {
+    if (hasLayers && !selectedFacility && !selectedConnection && !selectedRouteGroup && !mapRef.current.dataset.initialFit) {
       mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50] });
       mapRef.current.dataset.initialFit = "true";
     }
-  }, [facilities, connections, selectedFacility, selectedConnection, facilityMap, filters, facTypeFilters, appState, globalFacilityStats, activePaths, currentMapStyle]);
+  }, [facilities, connections, selectedFacility, selectedConnection, selectedRouteGroup, facilityMap, filters, facTypeFilters, appState, globalFacilityStats, activePaths, currentMapStyle]);
 
   const getFacilitySpecificStats = () => {
       if (!selectedFacility) return null;
@@ -1058,9 +1470,69 @@ const App = () => {
       outbound = outbound.filter(c => filters.vmodes[c.vmode]); inbound = inbound.filter(c => filters.vmodes[c.vmode]);
       const applySidebarFilter = (list) => { if (sidebarFilter === 'ALL') return list; if (sidebarFilter === 'FTL') return list.filter(c => c.vmode === 'FTL'); if (sidebarFilter === 'CARTING') return list.filter(c => c.vmode === 'CARTING' || c.vmode === 'LTL'); if (sidebarFilter === 'LONG') return list.filter(c => c.dist > 500); return list; };
       outbound = applySidebarFilter(outbound); inbound = applySidebarFilter(inbound);
+      
+      // --- ADVANCED GROUPING LOGIC ---
+      // 1. Bucket everything by RouteID|SetID
+      const routeMap = {}; // Key: "ID|SetID", Value: { outbound: [], inbound: [] }
+      
+      // Process Outbound
+      const finalOutbound = [];
+      outbound.forEach(c => {
+          if (c.route_id !== 'NA' && c.route_set_id !== 'NA') {
+              const key = `${c.route_id}|${c.route_set_id}`;
+              if (!routeMap[key]) routeMap[key] = { outbound: [], inbound: [] };
+              routeMap[key].outbound.push(c);
+          } else {
+              finalOutbound.push(c); // Single outbound
+          }
+      });
+
+      // Process Inbound
+      const finalInbound = [];
+      inbound.forEach(c => {
+          if (c.route_id !== 'NA' && c.route_set_id !== 'NA') {
+              const key = `${c.route_id}|${c.route_set_id}`;
+              if (!routeMap[key]) routeMap[key] = { outbound: [], inbound: [] };
+              routeMap[key].inbound.push(c);
+          } else {
+              finalInbound.push(c); // Single inbound
+          }
+      });
+
+      const roundTrips = [];
+
+      // 2. Classify Buckets
+      Object.entries(routeMap).forEach(([key, group]) => {
+          const { outbound: outs, inbound: ins } = group;
+          
+          if (outs.length > 0 && ins.length > 0) {
+              // Round Trip
+              outs.sort((a,b) => a.eta.localeCompare(b.eta));
+              // Note: We keep ins raw for lookup later
+              roundTrips.push({ routeId: key.split('|')[0], forward: outs, reverse: ins });
+          } else {
+              // One-Way Milk Runs
+              if (outs.length > 0) {
+                  outs.sort((a,b) => a.eta.localeCompare(b.eta));
+                  finalOutbound.push({ ...outs[0], stops: outs });
+              }
+              if (ins.length > 0) {
+                  ins.sort((a,b) => a.cutoff.localeCompare(b.cutoff));
+                  finalInbound.push({ ...ins[0], stops: ins });
+              }
+          }
+      });
+
       const sortList = (list) => { return list.sort((a, b) => { let valA, valB; if (sortConfig.key === 'dist') { valA = a.dist; valB = b.dist; } else { valA = a.vehicle_size.toLowerCase(); valB = b.vehicle_size.toLowerCase(); } if (valA < valB) return sortConfig.dir === 'asc' ? -1 : 1; if (valA > valB) return sortConfig.dir === 'asc' ? 1 : -1; return 0; }); };
-      outbound = sortList(outbound); inbound = sortList(inbound);
-      return { outbound, inbound, rawOutCount, rawInCount, shifts };
+      
+      return { 
+          outbound: sortList(finalOutbound), 
+          inbound: sortList(finalInbound), 
+          roundTrips: roundTrips,
+          rawOutCount, 
+          rawInCount, 
+          shifts 
+      };
   };
   const currentStats = getFacilitySpecificStats();
   const getOSRMInfo = () => {
@@ -1075,6 +1547,175 @@ const App = () => {
       return { distKm, durStr, airDist, bufferHours, segments: data.segments || [], rawSteps: data.rawSteps || [] };
   };
   const osrmData = getOSRMInfo();
+
+  // NEW: Advanced Multi-Route Metrics with Stop-Wise Buffer Calculation
+  const getMultiRouteMetrics = () => {
+      if (!selectedRouteGroup) return null;
+      const groupKey = `MULTI_${selectedRouteGroup.routeId || selectedRouteGroup.stops[0].oc}`;
+      const data = activePaths[groupKey];
+      
+      // 1. Build LOGICAL Timeline using STAR TOPOLOGY data
+      let logicalSequence = [];
+      let startTime = "";
+      let endTime = "";
+
+      if (selectedRouteGroup.forward && selectedRouteGroup.reverse) {
+          // ROUND TRIP: 
+          // Forward Array contains: Hub -> Stop 1, Hub -> Stop 2, etc. (Sorted by ETA)
+          // Reverse Array contains: Stop 1 -> Hub, Stop 2 -> Hub, etc. (Lookup for departures)
+
+          // 1. Start (Hub)
+          const hubName = selectedRouteGroup.forward[0].oc;
+          startTime = selectedRouteGroup.forward[0].cutoff;
+          logicalSequence.push({ 
+              name: hubName, 
+              arr: null, 
+              dep: startTime, 
+              type: 'start' 
+          });
+
+          // 2. Intermediate Stops
+          selectedRouteGroup.forward.forEach((fwdItem) => {
+              const stopName = fwdItem.cn;
+              const arrivalTime = fwdItem.eta;
+              
+              // Find matching departure (Reverse leg from Stop -> Hub)
+              const revItem = selectedRouteGroup.reverse.find(r => r.oc === stopName);
+              const departureTime = revItem ? revItem.cutoff : null;
+              
+              // Calculate Dwell
+              let dwell = 0;
+              if (departureTime) {
+                  dwell = calculateTimeDiffMinutes(arrivalTime, departureTime);
+              }
+
+              logicalSequence.push({
+                  name: stopName,
+                  arr: arrivalTime,
+                  dep: departureTime,
+                  dwell: dwell,
+                  type: 'stop'
+              });
+          });
+
+          // 3. End (Hub)
+          // The arrival at Hub is the ETA of the LAST reverse leg (Last Stop -> Hub)
+          // Sequence implies: Last Stop -> Hub is the final leg
+          const lastStopName = logicalSequence[logicalSequence.length - 1].name;
+          const lastRevItem = selectedRouteGroup.reverse.find(r => r.oc === lastStopName);
+          
+          if (lastRevItem) {
+              endTime = lastRevItem.eta;
+              logicalSequence.push({
+                  name: hubName, // Back to Hub
+                  arr: endTime,
+                  dep: null,
+                  type: 'end'
+              });
+          }
+
+      } else if (selectedRouteGroup.stops) {
+          // MILK RUN (One Way)
+          startTime = selectedRouteGroup.stops[0].cutoff;
+          logicalSequence.push({ name: selectedRouteGroup.stops[0].oc, arr: null, dep: startTime, type: 'start' });
+          
+          selectedRouteGroup.stops.forEach((s) => {
+              logicalSequence.push({
+                  name: s.cn,
+                  arr: s.eta,
+                  dep: null, // One way, no dep logic from data usually
+                  dwell: 0,
+                  type: 'stop'
+              });
+          });
+          
+          // Mark last as end
+          logicalSequence[logicalSequence.length - 1].type = 'end';
+          endTime = logicalSequence[logicalSequence.length - 1].arr;
+      }
+
+      const scheduledDurationHours = calculateTimeDiffHours(startTime, endTime);
+      
+      if (!data || !data.metrics) return { 
+          distKm: "...", 
+          durStr: "...", 
+          bufferHours: "...",
+          scheduledDuration: scheduledDurationHours.toFixed(1),
+          detailedStops: []
+      };
+
+      const distKm = (data.metrics.distance / 1000).toFixed(1);
+      const durStr = formatDuration(data.metrics.duration);
+      
+      // 2. MAP OSRM LEGS TO LOGICAL SEQUENCE
+      let detailedStops = [];
+      let legIndex = 0;
+      
+      // We iterate through logical nodes (0 to N-1) to build segments
+      for (let i = 0; i < logicalSequence.length; i++) {
+          const node = logicalSequence[i];
+          const nextNode = logicalSequence[i+1]; // Can be undefined if last
+
+          // If last node, push simple
+          if (!nextNode) {
+             detailedStops.push({
+                 nodeName: node.name,
+                 type: 'end',
+                 arrivalTime: node.arr,
+                 departureTime: null,
+                 dwellTime: 0,
+                 nextLeg: null
+             });
+             continue;
+          }
+
+          // Leg Data (OSRM)
+          let legDistance = 0;
+          let legDurationMin = 0;
+          
+          if (data.legs && data.legs[legIndex]) {
+              legDistance = (data.legs[legIndex].distance / 1000).toFixed(1);
+              legDurationMin = Math.round(data.legs[legIndex].duration / 60);
+              legIndex++;
+          }
+          
+          // Calculate Road Buffer
+          // Schedule gap between Current Dep -> Next Arr
+          // Note: Current node might be Start (Dep) or Stop (Arr, Dep)
+          const tDep = node.dep || node.arr; // Fallback
+          const tArr = nextNode.arr;
+          
+          const scheduleGap = calculateTimeDiffMinutes(tDep, tArr);
+          const roadBuffer = Math.max(0, scheduleGap - legDurationMin);
+
+          detailedStops.push({
+              nodeName: node.name,
+              type: node.type,
+              arrivalTime: node.arr,
+              departureTime: node.dep,
+              dwellTime: node.dwell || 0,
+              
+              nextLeg: {
+                  to: nextNode.name,
+                  distance: legDistance,
+                  duration: legDurationMin,
+                  roadBuffer: roadBuffer
+              }
+          });
+      }
+
+      // Calc Total Buffer (Dwell + Road Slack)
+      const totalBufferHours = (detailedStops.reduce((acc, s) => acc + (s.nextLeg ? s.nextLeg.roadBuffer || 0 : 0) + s.dwellTime, 0) / 60).toFixed(1);
+
+      return { 
+          distKm, 
+          durStr, 
+          bufferHours: totalBufferHours, 
+          scheduledDuration: scheduledDurationHours.toFixed(1),
+          detailedStops
+      };
+  };
+  const multiRouteData = getMultiRouteMetrics();
 
   if (appState === 'ERROR') {
       return (
@@ -1277,12 +1918,14 @@ const App = () => {
         <aside className="w-96 bg-white border-r border-slate-200 flex flex-col z-10 shadow-lg relative">
             
             {/* Conditional Sidebar Header based on Mode */}
-            {selectedConnection ? (
+            {selectedConnection || selectedRouteGroup ? (
                <div className="p-4 border-b border-slate-100 bg-blue-50/80 flex items-center gap-2 animate-fadeIn relative">
-                   <button onClick={() => setSelectedConnection(null)} className="p-1 rounded-full hover:bg-white text-blue-600 transition-colors"><ArrowLeft size={16}/></button>
+                   <button onClick={() => { setSelectedConnection(null); setSelectedRouteGroup(null); }} className="p-1 rounded-full hover:bg-white text-blue-600 transition-colors"><ArrowLeft size={16}/></button>
                    <div className="flex-1">
                        <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Route Focus</div>
-                       <div className="text-sm font-bold text-blue-800 leading-tight truncate">{selectedConnection.oc} ➝ {selectedConnection.cn}</div>
+                       <div className="text-sm font-bold text-blue-800 leading-tight truncate">
+                           {selectedRouteGroup ? `Multi-Stop Route` : `${selectedConnection.oc} ➝ ${selectedConnection.cn}`}
+                       </div>
                    </div>
                    {/* Settings Icon in Route Focus Mode */}
                     <div className="relative">
@@ -1374,7 +2017,7 @@ const App = () => {
 
             <div className="flex-1 overflow-y-auto p-4 pb-20">
                 {/* 1. GLOBAL NETWORK FILTERS (New Integration) */}
-                {(!selectedConnection) && (
+                {(!selectedConnection && !selectedRouteGroup) && (
                     <div className="mb-4 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm transition-all duration-300">
                         <button 
                             onClick={() => setShowFilters(!showFilters)}
@@ -1401,6 +2044,11 @@ const App = () => {
                                             <input type="checkbox" className="hidden" checked={filters.showInbound} onChange={(e) => setFilters({...filters, showInbound: e.target.checked})}/>
                                             <div className={`w-2 h-2 rounded-full ${filters.showInbound ? 'bg-amber-500' : 'bg-slate-300'}`}></div>
                                             <span className={`text-[10px] font-bold ${filters.showInbound ? 'text-amber-700' : 'text-slate-400'}`}>Inbound</span>
+                                        </label>
+                                        <label className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${filters.showRoundTrips ? 'bg-pink-50 border-pink-200' : 'bg-slate-50 border-slate-100'}`}>
+                                            <input type="checkbox" className="hidden" checked={filters.showRoundTrips} onChange={(e) => setFilters({...filters, showRoundTrips: e.target.checked})}/>
+                                            <div className={`w-2 h-2 rounded-full ${filters.showRoundTrips ? 'bg-pink-500' : 'bg-slate-300'}`}></div>
+                                            <span className={`text-[10px] font-bold ${filters.showRoundTrips ? 'text-pink-700' : 'text-slate-400'}`}>Round Trips</span>
                                         </label>
                                      </div>
                                  </div>
@@ -1437,7 +2085,132 @@ const App = () => {
                     </div>
                 )}
 
-                {selectedConnection ? (
+                {selectedRouteGroup ? (
+                    // SHOW MULTI-STOP SUMMARY
+                    <div className="space-y-4 animate-fadeIn">
+                        {/* 1. MISSION SUMMARY DASHBOARD */}
+                        <div className="bg-white border border-pink-200 rounded-lg p-3 shadow-sm relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-2 opacity-5"><Activity size={64}/></div>
+                            
+                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Mission Control</h4>
+                            
+                            {/* METRICS GRID */}
+                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mb-1">
+                                        <Truck size={12}/> Total Drive Dist.
+                                    </div>
+                                    <div className="text-xl font-black text-indigo-600">
+                                        {multiRouteData.distKm} <span className="text-xs font-normal text-slate-400">km</span>
+                                    </div>
+                                </div>
+                                <div className="bg-slate-50 p-2 rounded border border-slate-100">
+                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mb-1">
+                                        <Timer size={12}/> Pure Drive Time
+                                    </div>
+                                    <div className="text-xl font-black text-indigo-600">
+                                        {multiRouteData.durStr}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* TIMELINE ANALYSIS */}
+                            <div className="bg-slate-50 rounded border border-slate-100 p-2">
+                                <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-2">
+                                    <span>Schedule Efficiency</span>
+                                    <span>{multiRouteData.scheduledDuration}h Total</span>
+                                </div>
+                                <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden flex mb-1">
+                                    {/* Drive Time (approx % of total) */}
+                                    <div className="h-full bg-indigo-500" style={{ width: '60%' }}></div>
+                                    {/* Buffer/Ops Time */}
+                                    <div className="h-full bg-emerald-400" style={{ flex: 1 }}></div>
+                                </div>
+                                <div className="flex justify-between text-[9px]">
+                                    <span className="text-indigo-600 font-bold">Driving</span>
+                                    <span className="text-emerald-600 font-bold">Total Ops & Buffer: {multiRouteData.bufferHours}h</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 2. MISSION MANIFEST (VERTICAL TIMELINE WITH BUFFERS) */}
+                        <div className="bg-white border border-indigo-200 rounded-lg p-4 shadow-sm">
+                            <h3 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
+                                <List size={16} className="text-indigo-500"/> 
+                                Mission Manifest
+                            </h3>
+                            <div className="text-xs text-slate-500 mb-4 bg-slate-50 p-2 rounded border border-slate-100 leading-relaxed">
+                                Detailed breakdown of driving legs and inferred operational buffers at each facility.
+                            </div>
+                            
+                            <div className="space-y-0 relative pl-2">
+                                {/* Vertical Line */}
+                                <div className="absolute left-[21px] top-2 bottom-6 w-0.5 bg-slate-200"></div>
+
+                                {multiRouteData.detailedStops.map((stop, i) => (
+                                    <React.Fragment key={i}>
+                                        {/* STOP NODE */}
+                                        <div className="flex items-start gap-3 mb-0 relative z-10 group">
+                                            <div className="w-8 h-8 rounded-full bg-white border-2 border-slate-300 flex items-center justify-center shrink-0 shadow-sm z-10">
+                                                {i === 0 ? <PlayCircle size={16} className="text-emerald-500"/> : 
+                                                 stop.type === 'end' ? <FlagIcon size={16} className="text-red-500"/> :
+                                                 <StopCircle size={16} className="text-slate-500"/>}
+                                            </div>
+                                            <div className="flex-1 bg-slate-50 hover:bg-white border border-slate-200 p-2 rounded-lg transition-all shadow-sm">
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <span className="text-xs font-bold text-slate-800">{stop.nodeName}</span>
+                                                    {/* Time Display Badge */}
+                                                    {i === 0 ? (
+                                                        <span className="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-1.5 rounded border border-emerald-100">
+                                                            Dep: {stop.departureTime}
+                                                        </span>
+                                                    ) : stop.type === 'end' ? (
+                                                        <span className="text-[10px] font-mono text-slate-500 bg-slate-200 px-1.5 rounded">
+                                                            Arr: {stop.arrivalTime}
+                                                        </span>
+                                                    ) : (
+                                                        <div className="flex flex-col items-end text-[9px] font-mono text-slate-500 bg-slate-100 px-1.5 rounded border border-slate-200">
+                                                            <span>Arr: {stop.arrivalTime}</span>
+                                                            <span className="border-t border-slate-200 w-full text-right mt-0.5 pt-0.5">Dep: {stop.departureTime}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                
+                                                {/* Dwell Time Highlight */}
+                                                {stop.dwellTime > 0 && (
+                                                    <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 w-fit">
+                                                        <ArrowLeftRight size={10}/> {stop.dwellTime}m Turnaround
+                                                    </div>
+                                                )}
+                                                
+                                                {i === 0 && <div className="text-[9px] text-slate-400 mt-1">Mission Start</div>}
+                                                {stop.type === 'end' && <div className="text-[9px] text-emerald-500 font-bold mt-1">Mission Complete</div>}
+                                            </div>
+                                        </div>
+
+                                        {/* DRIVE LEG (If next leg exists) */}
+                                        {stop.nextLeg && (
+                                            <div className="flex items-center gap-3 my-2 ml-2 relative z-0">
+                                                <div className="w-4 flex flex-col items-center">
+                                                    {/* Spacer aligned with dots */}
+                                                </div>
+                                                <div className="flex-1 border-l-2 border-indigo-200 pl-4 py-2 ml-1.5 relative">
+                                                    <div className="text-[10px] font-bold text-indigo-600 flex items-center gap-1.5 mb-0.5">
+                                                        <Truck size={10}/> {stop.nextLeg.distance} km
+                                                    </div>
+                                                    <div className="text-[9px] text-slate-500 font-mono">
+                                                        ~{stop.nextLeg.duration} min drive
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                        </div>
+                        <button onClick={() => { setSelectedRouteGroup(null); }} className="w-full py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded transition-colors">Return to Hub View</button>
+                    </div>
+                ) : selectedConnection ? (
                     // ROUTE DETAIL VIEW WITH METRICS
                     <div className="space-y-4 animate-fadeIn">
                         <div className="bg-white border border-blue-200 rounded-lg p-4 shadow-sm">
@@ -1785,6 +2558,24 @@ const App = () => {
                             )}
                         </div>
 
+                        {/* ROUND TRIPS SECTION (NEW) */}
+                        {filters.showRoundTrips && currentStats.roundTrips.length > 0 && (
+                            <div className="mb-4">
+                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-pink-500 shadow-sm shadow-pink-200"></div> Round Trips ({currentStats.roundTrips.length})
+                                </h4>
+                                <div>
+                                    {currentStats.roundTrips.map((rt, idx) => (
+                                        <RoundTripCard 
+                                            key={idx} 
+                                            data={rt}
+                                            onSelect={handleConnectionClick}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Outbound Card */}
                         {filters.showOutbound && (
                             <div>
@@ -1795,30 +2586,13 @@ const App = () => {
                                     {currentStats.outbound.length === 0 ? 
                                         <div className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded border border-slate-100 text-center">No outbound routes match current filters.</div> :
                                     currentStats.outbound.map((conn, idx) => (
-                                        <div key={idx} onClick={() => handleConnectionClick(conn)} className="bg-emerald-50/50 border border-emerald-100 p-3 rounded-lg hover:bg-emerald-50 transition-colors shadow-sm cursor-pointer hover:border-emerald-300">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <span className="text-sm font-bold text-emerald-900">{conn.cn}</span>
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[10px] font-bold text-emerald-700 border border-emerald-200 bg-white px-1.5 py-0.5 rounded mb-1">{conn.vmode}</span>
-                                                    <span className="text-[10px] text-slate-500 font-medium">{conn.vehicle_size}</span>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="flex items-center justify-between text-xs mt-2 bg-white/60 p-2 rounded border border-emerald-100/50">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">ETD</span>
-                                                    <span className="font-bold text-emerald-700 text-sm">{conn.cutoff}</span>
-                                                </div>
-                                                <div className="flex flex-col items-center px-2">
-                                                        <span className="text-[10px] text-slate-400 mb-0.5 font-mono bg-slate-100 px-1 rounded">{conn.tat}h</span>
-                                                        <div className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1 rounded border border-slate-200">{conn.dist > 0 ? conn.dist + ' km' : 'N/A'}</div>
-                                                </div>
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[10px] text-slate-400 font-medium uppercase">ETA</span>
-                                                    <span className="text-slate-600 font-medium">{conn.eta}</span>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <RouteCard 
+                                            key={idx} 
+                                            type="outbound" 
+                                            data={conn} 
+                                            onSelect={handleConnectionClick} 
+                                            facilityMap={facilityMap}
+                                        />
                                     ))}
                                 </div>
                             </div>
@@ -1834,30 +2608,13 @@ const App = () => {
                                     {currentStats.inbound.length === 0 ? 
                                         <div className="text-xs text-slate-400 italic bg-slate-50 p-3 rounded border border-slate-100 text-center">No inbound routes match current filters.</div> :
                                     currentStats.inbound.map((conn, idx) => (
-                                        <div key={idx} onClick={() => handleConnectionClick(conn)} className="bg-amber-50/50 border border-amber-100 p-3 rounded-lg hover:bg-amber-50 transition-colors shadow-sm cursor-pointer hover:border-amber-300">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <span className="text-sm font-bold text-amber-900">{conn.oc}</span>
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[10px] font-bold text-amber-700 border border-amber-200 bg-white px-1.5 py-0.5 rounded mb-1">{conn.vmode}</span>
-                                                    <span className="text-[10px] text-slate-500 font-medium">{conn.vehicle_size}</span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center justify-between text-xs mt-2 bg-white/60 p-2 rounded border border-amber-100/50">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[10px] text-slate-400 font-medium uppercase">ETD</span>
-                                                    <span className="text-slate-600 font-medium">{conn.cutoff}</span>
-                                                </div>
-                                                <div className="flex flex-col items-center px-2">
-                                                        <span className="text-[10px] text-slate-400 mb-0.5 font-mono bg-slate-100 px-1 rounded">{conn.tat}h</span>
-                                                        <div className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1 rounded border border-slate-200">{conn.dist > 0 ? conn.dist + ' km' : 'N/A'}</div>
-                                                </div>
-                                                <div className="flex flex-col items-end">
-                                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">ETA</span>
-                                                    <span className="font-bold text-amber-700 text-sm">{conn.eta}</span>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <RouteCard 
+                                            key={idx} 
+                                            type="inbound" 
+                                            data={conn} 
+                                            onSelect={handleConnectionClick} 
+                                            facilityMap={facilityMap}
+                                        />
                                     ))}
                                 </div>
                             </div>
