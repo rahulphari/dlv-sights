@@ -368,7 +368,7 @@ const RoundTripCard = ({ data, onSelect }) => {
                         <span className="text-[10px] text-slate-400 font-mono">ID: {routeId}</span>
                     </div>
                     <div className="text-right">
-                        <div className="text-[10px] text-slate-400 font-medium">Mission Duration</div>
+                        <div className="text-[10px] text-slate-400 font-medium">TRIP Duration</div>
                         <div className="text-xs font-black text-pink-600 font-mono">{startTime} - {endTime}</div>
                     </div>
                 </div>
@@ -2088,11 +2088,11 @@ const App = () => {
                 {selectedRouteGroup ? (
                     // SHOW MULTI-STOP SUMMARY
                     <div className="space-y-4 animate-fadeIn">
-                        {/* 1. MISSION SUMMARY DASHBOARD */}
+                        {/* 1. TRIP SUMMARY DASHBOARD */}
                         <div className="bg-white border border-pink-200 rounded-lg p-3 shadow-sm relative overflow-hidden">
                             <div className="absolute top-0 right-0 p-2 opacity-5"><Activity size={64}/></div>
                             
-                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Mission Control</h4>
+                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">TRIP Control</h4>
                             
                             {/* METRICS GRID */}
                             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -2133,11 +2133,11 @@ const App = () => {
                             </div>
                         </div>
 
-                        {/* 2. MISSION MANIFEST (VERTICAL TIMELINE WITH BUFFERS) */}
+                        {/* 2. TRIP MANIFEST (VERTICAL TIMELINE WITH BUFFERS) */}
                         <div className="bg-white border border-indigo-200 rounded-lg p-4 shadow-sm">
                             <h3 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
                                 <List size={16} className="text-indigo-500"/> 
-                                Mission Manifest
+                                TRIP Manifest
                             </h3>
                             <div className="text-xs text-slate-500 mb-4 bg-slate-50 p-2 rounded border border-slate-100 leading-relaxed">
                                 Detailed breakdown of driving legs and inferred operational buffers at each facility.
@@ -2183,8 +2183,8 @@ const App = () => {
                                                     </div>
                                                 )}
                                                 
-                                                {i === 0 && <div className="text-[9px] text-slate-400 mt-1">Mission Start</div>}
-                                                {stop.type === 'end' && <div className="text-[9px] text-emerald-500 font-bold mt-1">Mission Complete</div>}
+                                                {i === 0 && <div className="text-[9px] text-slate-400 mt-1">TRIP Start</div>}
+                                                {stop.type === 'end' && <div className="text-[9px] text-emerald-500 font-bold mt-1">TRIP Complete</div>}
                                             </div>
                                         </div>
 
