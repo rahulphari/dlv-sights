@@ -2239,7 +2239,7 @@ const App = () => {
                                 ))}
                             </div>
                         </div>
-                        <button onClick={() => { setSelectedRouteGroup(null); }} className="w-full py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded transition-colors">MAP VIEW.</button>
+                        <button onClick={() => { setSelectedRouteGroup(null); }} className="w-full py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded transition-colors">CLICK FOR MAP VIEW</button>
                     </div>
                 ) : selectedConnection ? (
                     // ROUTE DETAIL VIEW WITH METRICS
