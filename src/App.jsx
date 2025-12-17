@@ -2179,7 +2179,7 @@ const App = () => {
                                                 {/* Dwell Time Highlight */}
                                                 {stop.dwellTime > 0 && (
                                                     <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 w-fit">
-                                                        <ArrowLeftRight size={10}/> {stop.dwellTime}m Turnaround
+                                                        <ArrowLeftRight size={10}/> {stop.dwellTime}m Unloading/Loading Buffer
                                                     </div>
                                                 )}
                                                 
