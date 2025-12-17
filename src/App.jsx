@@ -347,9 +347,7 @@ const RoundTripCard = ({ data, onSelect }) => {
     const { routeId, forward, reverse } = data;
     
     // Calculate Stats
-    // Start is first forward cutoff
     const startTime = forward[0].cutoff;
-    // End is last reverse ETA
     const endTime = reverse[reverse.length - 1].eta;
     
     // Construct Route Name: "OC -> P1 -> P2 -> OC"
@@ -368,7 +366,7 @@ const RoundTripCard = ({ data, onSelect }) => {
                         <span className="text-[10px] text-slate-400 font-mono">ID: {routeId}</span>
                     </div>
                     <div className="text-right">
-                        <div className="text-[10px] text-slate-400 font-medium">TRIP Duration</div>
+                        <div className="text-[10px] text-slate-400 font-medium">Mission Duration</div>
                         <div className="text-xs font-black text-pink-600 font-mono">{startTime} - {endTime}</div>
                     </div>
                 </div>
@@ -596,7 +594,6 @@ const App = () => {
   });
 
   const [sidebarFilter, setSidebarFilter] = useState('ALL'); 
-  const [showSortOptions, setShowSortOptions] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'dist', dir: 'desc' }); 
 
   const [showFacLegend, setShowFacLegend] = useState(true); // OPEN BY DEFAULT
@@ -623,6 +620,11 @@ const App = () => {
   const isGeneratingRef = useRef(false); // Ref for timeout access
   const [genProgress, setGenProgress] = useState('');
   const [detailedViewMode, setDetailedViewMode] = useState('ANATOMY'); // 'ANATOMY' or 'STEPS'
+
+  // NEW UI TWEAK STATES
+  const [showShiftBreakdown, setShowShiftBreakdown] = useState(false);
+  const [showRouteGenModal, setShowRouteGenModal] = useState(false);
+  const [routeGenTarget, setRouteGenTarget] = useState('ALL'); // 'ALL', 'INBOUND', 'OUTBOUND', 'ROUNDTRIP'
 
 
   const [appState, setAppState] = useState('LOADING'); // LOADING, VERIFY, READY, ERROR
@@ -1218,15 +1220,45 @@ const App = () => {
       return null;
   };
 
-  const handleRegenerateRoutes = async (provider = 'OSRM') => {
+  const handleRegenerateRoutes = async (provider = 'OSRM', targetFilter = null) => {
       let targets = [];
-      if (selectedConnection) targets = [selectedConnection];
-      else if (selectedFacility) {
-          if (filters.showOutbound) targets = [...targets, ...connections.filter(c => c.oc === selectedFacility.name && filters.vmodes[c.vmode])];
-          if (filters.showInbound) targets = [...targets, ...connections.filter(c => c.cn === selectedFacility.name && filters.vmodes[c.vmode])];
-      }
-      if (targets.length === 0) return;
+      const filterToUse = targetFilter || routeGenTarget;
       
+      // If single route selected (Priority)
+      if (selectedConnection) {
+          targets = [selectedConnection];
+      }
+      else if (selectedRouteGroup) {
+          // If a multi-stop group is active, maybe re-generate that?
+          // For now, let's assume this button is for batch generation of the LIST
+          // But if a group is selected, we might want to just refresh that.
+          // Let's stick to the list logic for batch buttons.
+      }
+      
+      // Batch Logic based on Facility
+      if (selectedFacility && targets.length === 0) {
+          if (filterToUse === 'ALL' || filterToUse === 'OUTBOUND') {
+             targets = [...targets, ...connections.filter(c => c.oc === selectedFacility.name && filters.vmodes[c.vmode])];
+          }
+          if (filterToUse === 'ALL' || filterToUse === 'INBOUND') {
+             targets = [...targets, ...connections.filter(c => c.cn === selectedFacility.name && filters.vmodes[c.vmode])];
+          }
+          // Note: Round trips are subsets of these connections, so fetching connections covers them
+          // If we want to only fetch round trips, we'd need to filter the connections that belong to round trips
+          // For simplicity, 'ROUNDTRIP' target could filter connections that have route_id
+          if (filterToUse === 'ROUNDTRIP') {
+             targets = connections.filter(c => (c.oc === selectedFacility.name || c.cn === selectedFacility.name) && c.route_id !== 'NA' && filters.vmodes[c.vmode]);
+          }
+      }
+
+      if (targets.length === 0) {
+          showToast("No routes found to visualize.", 'error');
+          return;
+      }
+      
+      // Close Modal
+      setShowRouteGenModal(false);
+
       setIsGenerating(true);
       isGeneratingRef.current = true;
       setGenProgress(`0/${targets.length}`);
@@ -1268,6 +1300,13 @@ const App = () => {
       setIsGenerating(false);
       isGeneratingRef.current = false;
       setGenProgress('');
+      showToast(`Successfully visualized ${targets.length} routes!`, 'success');
+  };
+
+  // Wrapper to open modal
+  const openRouteGenModal = (target) => {
+      setRouteGenTarget(target);
+      setShowRouteGenModal(true);
   };
 
   useEffect(() => {
@@ -1508,7 +1547,7 @@ const App = () => {
           if (outs.length > 0 && ins.length > 0) {
               // Round Trip
               outs.sort((a,b) => a.eta.localeCompare(b.eta));
-              // Note: We keep ins raw for lookup later
+              ins.sort((a,b) => a.cutoff.localeCompare(b.cutoff));
               roundTrips.push({ routeId: key.split('|')[0], forward: outs, reverse: ins });
           } else {
               // One-Way Milk Runs
@@ -1741,6 +1780,63 @@ const App = () => {
   return (
     <div className="flex flex-col h-screen bg-slate-50 font-sans text-slate-900 relative">
       <NotificationBanner notification={notification} onClose={() => setNotification(null)} />
+      
+      {/* ROUTE GENERATION CONFIRMATION MODAL */}
+      {showRouteGenModal && (
+          <div className="fixed inset-0 z-[2500] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
+              <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full border border-slate-200">
+                  <div className="text-center mb-6">
+                      <h3 className="text-lg font-bold text-slate-800">Choose Routing Engine</h3>
+                      <p className="text-xs text-slate-500 mt-1">Select a provider to visualize {routeGenTarget.toLowerCase().replace('_', ' ')} routes.</p>
+                  </div>
+                  
+                  <div className="space-y-3">
+                      {/* OSRM Option */}
+                      <button 
+                          onClick={() => handleRegenerateRoutes('OSRM')}
+                          className="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all group relative overflow-hidden"
+                      >
+                          <div className="flex justify-between items-start mb-1">
+                              <span className="font-bold text-slate-700 flex items-center gap-2"><Zap size={16} className="text-amber-500"/> Standard (OSRM)</span>
+                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Free</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-relaxed">Open Source, fast approximation. Good for general network overview.</p>
+                      </button>
+
+                      {/* Mapbox Option */}
+                      <div className={`w-full text-left p-3 rounded-xl border transition-all relative overflow-hidden ${mapboxUnlocked ? 'border-indigo-200 bg-indigo-50/30' : 'border-slate-200 bg-slate-50'}`}>
+                          <div className="flex justify-between items-start mb-1">
+                              <span className="font-bold text-slate-700 flex items-center gap-2"><Satellite size={16} className="text-indigo-500"/> Precision (Mapbox)</span>
+                              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">Enterprise</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 leading-relaxed mb-3">High-fidelity, turn-by-turn road geometry. Requires authentication.</p>
+                          
+                          {!mapboxUnlocked ? (
+                              <div className="flex gap-2">
+                                  <input 
+                                      type="password" 
+                                      placeholder="Passkey"
+                                      className="flex-1 text-xs px-2 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 outline-none"
+                                      value={passkeyInput}
+                                      onChange={(e) => setPasskeyInput(e.target.value)}
+                                  />
+                                  <button onClick={handleUnlockMapbox} className="bg-slate-800 text-white px-3 rounded hover:bg-slate-700 transition-colors text-xs font-bold">Unlock</button>
+                              </div>
+                          ) : (
+                               <button 
+                                  onClick={() => handleRegenerateRoutes('MAPBOX')}
+                                  className="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold text-xs hover:bg-indigo-700 transition-colors shadow-sm flex items-center justify-center gap-2"
+                               >
+                                  Generate High-Res Paths <ArrowRight size={12}/>
+                               </button>
+                          )}
+                      </div>
+                  </div>
+                  
+                  <button onClick={() => setShowRouteGenModal(false)} className="mt-4 text-xs text-slate-400 hover:text-slate-600 w-full">Cancel</button>
+              </div>
+          </div>
+      )}
       
       {/* SLOW GENERATION WARNING POPUP */}
       {showSlowGenWarning && (
@@ -2016,83 +2112,15 @@ const App = () => {
             )}
 
             <div className="flex-1 overflow-y-auto p-4 pb-20">
-                {/* 1. GLOBAL NETWORK FILTERS (New Integration) */}
-                {(!selectedConnection && !selectedRouteGroup) && (
-                    <div className="mb-4 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm transition-all duration-300">
-                        <button 
-                            onClick={() => setShowFilters(!showFilters)}
-                            className="w-full flex justify-between items-center px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
-                        >
-                            <h4 className="text-xs font-bold text-slate-600 flex items-center gap-2">
-                                <SlidersHorizontal size={14} className="text-indigo-500"/> Network Config
-                            </h4>
-                            {showFilters ? <ChevronUp size={14} className="text-slate-400"/> : <ChevronDown size={14} className="text-slate-400"/>}
-                        </button>
-                        
-                        {showFilters && (
-                             <div className="p-4 bg-white space-y-4 animate-fadeIn">
-                                 {/* Direction */}
-                                 <div>
-                                     <h5 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Traffic Direction</h5>
-                                     <div className="flex gap-2">
-                                        <label className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${filters.showOutbound ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100'}`}>
-                                            <input type="checkbox" className="hidden" checked={filters.showOutbound} onChange={(e) => setFilters({...filters, showOutbound: e.target.checked})}/>
-                                            <div className={`w-2 h-2 rounded-full ${filters.showOutbound ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
-                                            <span className={`text-[10px] font-bold ${filters.showOutbound ? 'text-emerald-700' : 'text-slate-400'}`}>Outbound</span>
-                                        </label>
-                                        <label className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${filters.showInbound ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
-                                            <input type="checkbox" className="hidden" checked={filters.showInbound} onChange={(e) => setFilters({...filters, showInbound: e.target.checked})}/>
-                                            <div className={`w-2 h-2 rounded-full ${filters.showInbound ? 'bg-amber-500' : 'bg-slate-300'}`}></div>
-                                            <span className={`text-[10px] font-bold ${filters.showInbound ? 'text-amber-700' : 'text-slate-400'}`}>Inbound</span>
-                                        </label>
-                                        <label className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${filters.showRoundTrips ? 'bg-pink-50 border-pink-200' : 'bg-slate-50 border-slate-100'}`}>
-                                            <input type="checkbox" className="hidden" checked={filters.showRoundTrips} onChange={(e) => setFilters({...filters, showRoundTrips: e.target.checked})}/>
-                                            <div className={`w-2 h-2 rounded-full ${filters.showRoundTrips ? 'bg-pink-500' : 'bg-slate-300'}`}></div>
-                                            <span className={`text-[10px] font-bold ${filters.showRoundTrips ? 'text-pink-700' : 'text-slate-400'}`}>Round Trips</span>
-                                        </label>
-                                     </div>
-                                 </div>
-
-                                 {/* Vehicle Modes */}
-                                 {Object.keys(filters.vmodes).length > 0 && (
-                                    <div>
-                                        <div className="flex justify-between items-end mb-2">
-                                            <h5 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Service Type</h5>
-                                            <button 
-                                                onClick={() => {
-                                                    const allTrue = Object.keys(filters.vmodes).every(k => filters.vmodes[k]);
-                                                    const newModes = {};
-                                                    Object.keys(filters.vmodes).forEach(k => newModes[k] = !allTrue);
-                                                    setFilters(p => ({...p, vmodes: newModes}));
-                                                }}
-                                                className="text-[8px] text-indigo-600 font-bold hover:underline"
-                                            >
-                                                Toggle All
-                                            </button>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-1.5">
-                                            {Object.keys(filters.vmodes).sort().map(mode => (
-                                                <label key={mode} className={`flex items-center gap-2 p-1.5 rounded border cursor-pointer transition-colors ${filters.vmodes[mode] ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-100 hover:bg-slate-50'}`}>
-                                                    <input type="checkbox" className="accent-indigo-500" checked={filters.vmodes[mode]} onChange={(e) => setFilters(p => ({...p, vmodes: {...p.vmodes, [mode]: e.target.checked}}))}/>
-                                                    <span className={`text-[10px] font-bold truncate ${filters.vmodes[mode] ? 'text-indigo-700' : 'text-slate-400 line-through'}`}>{mode}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                 )}
-                             </div>
-                        )}
-                    </div>
-                )}
-
+                
                 {selectedRouteGroup ? (
                     // SHOW MULTI-STOP SUMMARY
                     <div className="space-y-4 animate-fadeIn">
-                        {/* 1. TRIP SUMMARY DASHBOARD */}
+                        {/* 1. MISSION SUMMARY DASHBOARD */}
                         <div className="bg-white border border-pink-200 rounded-lg p-3 shadow-sm relative overflow-hidden">
                             <div className="absolute top-0 right-0 p-2 opacity-5"><Activity size={64}/></div>
                             
-                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">TRIP Control</h4>
+                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Mission Control</h4>
                             
                             {/* METRICS GRID */}
                             <div className="grid grid-cols-2 gap-3 mb-4">
@@ -2133,11 +2161,11 @@ const App = () => {
                             </div>
                         </div>
 
-                        {/* 2. TRIP MANIFEST (VERTICAL TIMELINE WITH BUFFERS) */}
+                        {/* 2. MISSION MANIFEST (VERTICAL TIMELINE WITH BUFFERS) */}
                         <div className="bg-white border border-indigo-200 rounded-lg p-4 shadow-sm">
                             <h3 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-2">
                                 <List size={16} className="text-indigo-500"/> 
-                                TRIP Manifest
+                                Mission Manifest
                             </h3>
                             <div className="text-xs text-slate-500 mb-4 bg-slate-50 p-2 rounded border border-slate-100 leading-relaxed">
                                 Detailed breakdown of driving legs and inferred operational buffers at each facility.
@@ -2179,12 +2207,12 @@ const App = () => {
                                                 {/* Dwell Time Highlight */}
                                                 {stop.dwellTime > 0 && (
                                                     <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 w-fit">
-                                                        <ArrowLeftRight size={10}/> {stop.dwellTime}m Unloading/Loading Buffer
+                                                        <ArrowLeftRight size={10}/> {stop.dwellTime}m Turnaround
                                                     </div>
                                                 )}
                                                 
-                                                {i === 0 && <div className="text-[9px] text-slate-400 mt-1">TRIP Start</div>}
-                                                {stop.type === 'end' && <div className="text-[9px] text-emerald-500 font-bold mt-1">TRIP Complete</div>}
+                                                {i === 0 && <div className="text-[9px] text-slate-400 mt-1">Mission Start</div>}
+                                                {stop.type === 'end' && <div className="text-[9px] text-emerald-500 font-bold mt-1">Mission Complete</div>}
                                             </div>
                                         </div>
 
@@ -2444,65 +2472,76 @@ const App = () => {
                             </div>
 
                             <button onClick={() => { setSelectedFacility(null); mapInstanceRef.current.closePopup(); }} className="mt-3 text-xs text-red-500 hover:text-red-700 underline flex items-center gap-1 font-medium"><ArrowRight className="rotate-180" size={12}/> Clear Selection</button>
+                            
+                            {/* Toggle Shift Analysis */}
+                            <button 
+                                onClick={() => setShowShiftBreakdown(!showShiftBreakdown)} 
+                                className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors"
+                                title="Toggle Shift Analysis"
+                            >
+                                <BarChart3 size={16}/>
+                            </button>
                         </div>
 
-                        {/* Shift Breakdown Matrix */}
-                        <div className="bg-slate-50 border border-slate-100 rounded-lg p-3">
-                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Shift Breakdown</h4>
-                            <div className="grid grid-cols-3 gap-2">
-                                {/* Morning */}
-                                <div className="bg-white p-2 rounded border border-orange-100 text-center">
-                                    <div className="flex justify-center mb-1"><Sunrise size={14} className="text-orange-400"/></div>
-                                    <div className="text-[10px] font-bold text-slate-700">MORNING</div>
-                                    <div className="text-[9px] text-slate-400 mb-1">06:00 - 14:00</div>
-                                    
-                                    <div className="flex justify-between text-[10px] border-t border-slate-100 pt-1 mt-1 text-left">
-                                        <div className="flex flex-col items-start">
-                                            <span className="text-emerald-600 font-bold">Out: {currentStats.shifts.MORNING.out}</span>
-                                            <span className="text-[7px] text-slate-400">F:{currentStats.shifts.MORNING.out_ftl} C:{currentStats.shifts.MORNING.out_crt}</span>
-                                        </div>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-amber-600 font-bold">In: {currentStats.shifts.MORNING.in}</span>
-                                            <span className="text-[7px] text-slate-400">F:{currentStats.shifts.MORNING.in_ftl} C:{currentStats.shifts.MORNING.in_crt}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                {/* Afternoon */}
-                                <div className="bg-white p-2 rounded border border-blue-100 text-center">
-                                    <div className="flex justify-center mb-1"><Sun size={14} className="text-blue-400"/></div>
-                                    <div className="text-[10px] font-bold text-slate-700">AFTERNOON</div>
-                                    <div className="text-[9px] text-slate-400 mb-1">14:00 - 22:00</div>
-                                    
-                                    <div className="flex justify-between text-[10px] border-t border-slate-100 pt-1 mt-1 text-left">
-                                        <div className="flex flex-col items-start">
-                                            <span className="text-emerald-600 font-bold">Out: {currentStats.shifts.AFTERNOON.out}</span>
-                                            <span className="text-[7px] text-slate-400">F:{currentStats.shifts.AFTERNOON.out_ftl} C:{currentStats.shifts.AFTERNOON.out_crt}</span>
-                                        </div>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-amber-600 font-bold">In: {currentStats.shifts.AFTERNOON.in}</span>
-                                            <span className="text-[7px] text-slate-400">F:{currentStats.shifts.AFTERNOON.in_ftl} C:{currentStats.shifts.AFTERNOON.in_crt}</span>
+                        {/* Shift Breakdown Matrix (Collapsible) */}
+                        {showShiftBreakdown && (
+                            <div className="bg-slate-50 border border-slate-100 rounded-lg p-3 animate-fadeIn">
+                                <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Shift Breakdown</h4>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {/* Morning */}
+                                    <div className="bg-white p-2 rounded border border-orange-100 text-center">
+                                        <div className="flex justify-center mb-1"><Sunrise size={14} className="text-orange-400"/></div>
+                                        <div className="text-[10px] font-bold text-slate-700">MORNING</div>
+                                        <div className="text-[9px] text-slate-400 mb-1">06:00 - 14:00</div>
+                                        
+                                        <div className="flex justify-between text-[10px] border-t border-slate-100 pt-1 mt-1 text-left">
+                                            <div className="flex flex-col items-start">
+                                                <span className="text-emerald-600 font-bold">Out: {currentStats.shifts.MORNING.out}</span>
+                                                <span className="text-[7px] text-slate-400">F:{currentStats.shifts.MORNING.out_ftl} C:{currentStats.shifts.MORNING.out_crt}</span>
+                                            </div>
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-amber-600 font-bold">In: {currentStats.shifts.MORNING.in}</span>
+                                                <span className="text-[7px] text-slate-400">F:{currentStats.shifts.MORNING.in_ftl} C:{currentStats.shifts.MORNING.in_crt}</span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                {/* Night */}
-                                <div className="bg-white p-2 rounded border border-indigo-100 text-center">
-                                    <div className="flex justify-center mb-1"><Moon size={14} className="text-indigo-400"/></div>
-                                    <div className="text-[10px] font-bold text-slate-700">NIGHT</div>
-                                    <div className="text-[9px] text-slate-400 mb-1">22:00 - 06:00</div>
-                                    
-                                    <div className="flex justify-between text-[10px] border-t border-slate-100 pt-1 mt-1 text-left">
-                                        <div className="flex flex-col items-start">
-                                            <span className="text-emerald-600 font-bold">Out: {currentStats.shifts.NIGHT.out}</span>
-                                            <span className="text-[7px] text-slate-400">F:{currentStats.shifts.NIGHT.out_ftl} C:{currentStats.shifts.NIGHT.out_crt}</span>
+                                    {/* Afternoon */}
+                                    <div className="bg-white p-2 rounded border border-blue-100 text-center">
+                                        <div className="flex justify-center mb-1"><Sun size={14} className="text-blue-400"/></div>
+                                        <div className="text-[10px] font-bold text-slate-700">AFTERNOON</div>
+                                        <div className="text-[9px] text-slate-400 mb-1">14:00 - 22:00</div>
+                                        
+                                        <div className="flex justify-between text-[10px] border-t border-slate-100 pt-1 mt-1 text-left">
+                                            <div className="flex flex-col items-start">
+                                                <span className="text-emerald-600 font-bold">Out: {currentStats.shifts.AFTERNOON.out}</span>
+                                                <span className="text-[7px] text-slate-400">F:{currentStats.shifts.AFTERNOON.out_ftl} C:{currentStats.shifts.AFTERNOON.out_crt}</span>
+                                            </div>
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-amber-600 font-bold">In: {currentStats.shifts.AFTERNOON.in}</span>
+                                                <span className="text-[7px] text-slate-400">F:{currentStats.shifts.AFTERNOON.in_ftl} C:{currentStats.shifts.AFTERNOON.in_crt}</span>
+                                            </div>
                                         </div>
-                                        <div className="flex flex-col items-end">
-                                            <span className="text-amber-600 font-bold">In: {currentStats.shifts.NIGHT.in}</span>
-                                            <span className="text-[7px] text-slate-400">F:{currentStats.shifts.NIGHT.in_ftl} C:{currentStats.shifts.NIGHT.in_crt}</span>
+                                    </div>
+                                    {/* Night */}
+                                    <div className="bg-white p-2 rounded border border-indigo-100 text-center">
+                                        <div className="flex justify-center mb-1"><Moon size={14} className="text-indigo-400"/></div>
+                                        <div className="text-[10px] font-bold text-slate-700">NIGHT</div>
+                                        <div className="text-[9px] text-slate-400 mb-1">22:00 - 06:00</div>
+                                        
+                                        <div className="flex justify-between text-[10px] border-t border-slate-100 pt-1 mt-1 text-left">
+                                            <div className="flex flex-col items-start">
+                                                <span className="text-emerald-600 font-bold">Out: {currentStats.shifts.NIGHT.out}</span>
+                                                <span className="text-[7px] text-slate-400">F:{currentStats.shifts.NIGHT.out_ftl} C:{currentStats.shifts.NIGHT.out_crt}</span>
+                                            </div>
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-amber-600 font-bold">In: {currentStats.shifts.NIGHT.in}</span>
+                                                <span className="text-[7px] text-slate-400">F:{currentStats.shifts.NIGHT.in_ftl} C:{currentStats.shifts.NIGHT.in_crt}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Sidebar Filters (Pills) */}
                         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
@@ -2521,40 +2560,81 @@ const App = () => {
                             ))}
                         </div>
 
-                        {/* NEW: Collapsible Sorter */}
-                        <div className="border border-slate-100 rounded-lg overflow-hidden">
+                        {/* 1. GLOBAL NETWORK FILTERS (New Integration - Moved Below Facility Card) */}
+                        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm transition-all duration-300">
                             <button 
-                                onClick={() => setShowSortOptions(!showSortOptions)}
-                                className="w-full flex justify-between items-center px-3 py-2 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-500"
+                                onClick={() => setShowFilters(!showFilters)}
+                                className="w-full flex justify-between items-center px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
                             >
-                                <div className="flex items-center gap-1"><SlidersHorizontal size={12}/> More Options</div>
-                                {showSortOptions ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
+                                <h4 className="text-xs font-bold text-slate-600 flex items-center gap-2">
+                                    <SlidersHorizontal size={14} className="text-indigo-500"/> Network Config
+                                </h4>
+                                {showFilters ? <ChevronUp size={14} className="text-slate-400"/> : <ChevronDown size={14} className="text-slate-400"/>}
                             </button>
                             
-                            {showSortOptions && (
-                                <div className="p-3 bg-white space-y-3 animate-fadeIn">
-                                    {/* Sort By */}
-                                    <div>
-                                        <h5 className="text-[10px] uppercase text-slate-400 font-bold mb-2">Sort By</h5>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <button 
-                                                onClick={() => setSortConfig({key:'dist', dir: sortConfig.key === 'dist' && sortConfig.dir === 'desc' ? 'asc' : 'desc'})}
-                                                className={`flex items-center justify-center gap-1 py-1.5 rounded text-[10px] border ${sortConfig.key === 'dist' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'border-slate-200 text-slate-600'}`}
-                                            >
-                                                Distance <ArrowDownUp size={10} />
-                                            </button>
-                                            <button 
-                                                onClick={() => setSortConfig({key:'size', dir: sortConfig.key === 'size' && sortConfig.dir === 'asc' ? 'desc' : 'asc'})}
-                                                className={`flex items-center justify-center gap-1 py-1.5 rounded text-[10px] border ${sortConfig.key === 'size' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'border-slate-200 text-slate-600'}`}
-                                            >
-                                                Vehicle Size <ArrowDownUp size={10} />
-                                            </button>
+                            {showFilters && (
+                                 <div className="p-4 bg-white space-y-4 animate-fadeIn border-t border-slate-100">
+                                     {/* Direction */}
+                                     <div>
+                                         <h5 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Traffic Direction</h5>
+                                         <div className="flex gap-2">
+                                            <label className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${filters.showOutbound ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100'}`}>
+                                                <input type="checkbox" className="hidden" checked={filters.showOutbound} onChange={(e) => setFilters({...filters, showOutbound: e.target.checked})}/>
+                                                <div className={`w-2 h-2 rounded-full ${filters.showOutbound ? 'bg-emerald-500' : 'bg-slate-300'}`}></div>
+                                                <span className={`text-[10px] font-bold ${filters.showOutbound ? 'text-emerald-700' : 'text-slate-400'}`}>Outbound</span>
+                                            </label>
+                                            <label className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${filters.showInbound ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
+                                                <input type="checkbox" className="hidden" checked={filters.showInbound} onChange={(e) => setFilters({...filters, showInbound: e.target.checked})}/>
+                                                <div className={`w-2 h-2 rounded-full ${filters.showInbound ? 'bg-amber-500' : 'bg-slate-300'}`}></div>
+                                                <span className={`text-[10px] font-bold ${filters.showInbound ? 'text-amber-700' : 'text-slate-400'}`}>Inbound</span>
+                                            </label>
+                                            <label className={`flex-1 flex items-center justify-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${filters.showRoundTrips ? 'bg-pink-50 border-pink-200' : 'bg-slate-50 border-slate-100'}`}>
+                                                <input type="checkbox" className="hidden" checked={filters.showRoundTrips} onChange={(e) => setFilters({...filters, showRoundTrips: e.target.checked})}/>
+                                                <div className={`w-2 h-2 rounded-full ${filters.showRoundTrips ? 'bg-pink-500' : 'bg-slate-300'}`}></div>
+                                                <span className={`text-[10px] font-bold ${filters.showRoundTrips ? 'text-pink-700' : 'text-slate-400'}`}>Round Trips</span>
+                                            </label>
+                                         </div>
+                                     </div>
+
+                                     {/* Vehicle Modes */}
+                                     {Object.keys(filters.vmodes).length > 0 && (
+                                        <div>
+                                            <div className="flex justify-between items-end mb-2">
+                                                <h5 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Service Type</h5>
+                                                <button 
+                                                    onClick={() => {
+                                                        const allTrue = Object.keys(filters.vmodes).every(k => filters.vmodes[k]);
+                                                        const newModes = {};
+                                                        Object.keys(filters.vmodes).forEach(k => newModes[k] = !allTrue);
+                                                        setFilters(p => ({...p, vmodes: newModes}));
+                                                    }}
+                                                    className="text-[8px] text-indigo-600 font-bold hover:underline"
+                                                >
+                                                    Toggle All
+                                                </button>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-1.5">
+                                                {Object.keys(filters.vmodes).sort().map(mode => (
+                                                    <label key={mode} className={`flex items-center gap-2 p-1.5 rounded border cursor-pointer transition-colors ${filters.vmodes[mode] ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-100 hover:bg-slate-50'}`}>
+                                                        <input type="checkbox" className="accent-indigo-500" checked={filters.vmodes[mode]} onChange={(e) => setFilters(p => ({...p, vmodes: {...p.vmodes, [mode]: e.target.checked}}))}/>
+                                                        <span className={`text-[10px] font-bold truncate ${filters.vmodes[mode] ? 'text-indigo-700' : 'text-slate-400 line-through'}`}>{mode}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="text-[10px] text-slate-400 italic text-center pt-1">
-                                        Currently sorted by: <b>{sortConfig.key === 'dist' ? 'Distance' : 'Vehicle'} ({sortConfig.dir === 'asc' ? 'Low-High' : 'High-Low'})</b>
-                                    </div>
-                                </div>
+                                     )}
+
+                                     {/* Route Visualization Action Toolbar */}
+                                     <div>
+                                         <h5 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2">Visualize Routes</h5>
+                                         <div className="grid grid-cols-2 gap-2">
+                                             <button onClick={() => openRouteGenModal('OUTBOUND')} className="bg-emerald-50 text-emerald-700 border border-emerald-200 py-1.5 rounded text-[10px] font-bold hover:bg-emerald-100 transition-colors flex items-center justify-center gap-1"><ArrowRight size={10}/> Outbound</button>
+                                             <button onClick={() => openRouteGenModal('INBOUND')} className="bg-amber-50 text-amber-700 border border-amber-200 py-1.5 rounded text-[10px] font-bold hover:bg-amber-100 transition-colors flex items-center justify-center gap-1"><ArrowLeft size={10}/> Inbound</button>
+                                             <button onClick={() => openRouteGenModal('ROUNDTRIP')} className="bg-pink-50 text-pink-700 border border-pink-200 py-1.5 rounded text-[10px] font-bold hover:bg-pink-100 transition-colors flex items-center justify-center gap-1"><Repeat size={10}/> Round Trips</button>
+                                             <button onClick={() => openRouteGenModal('ALL')} className="bg-indigo-50 text-indigo-700 border border-indigo-200 py-1.5 rounded text-[10px] font-bold hover:bg-indigo-100 transition-colors flex items-center justify-center gap-1"><Waypoints size={10}/> All Routes</button>
+                                         </div>
+                                     </div>
+                                 </div>
                             )}
                         </div>
 
