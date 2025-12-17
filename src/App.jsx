@@ -1944,10 +1944,9 @@ const App = () => {
                         <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full"></div>
                         <ShieldCheck size={64} className="text-emerald-500 relative z-10" />
                     </div>
-                    <h2 className="text-2xl font-bold mb-2">Disclaimer</h2>
+                    <h2 className="text-2xl font-bold mb-2">DISCLAIMER</h2>
                  <div className="max-w-2xl text-sm text-slate-300 leading-relaxed mb-8">
   <p>
-    <strong className="text-white block mb-1">IMPORTANT</strong>
     DLV-SIGHTS uses <em className="not-italic font-medium text-slate-200">RouteDbData</em> from DoctorHub for connection mapping. 
     While data is updated regularly, this database relies on manual updates and may not reflect real-time changes. 
     Please <button className="underline hover:text-white decoration-slate-500 underline-offset-4">report any discrepancies</button>.
